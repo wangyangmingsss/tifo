@@ -1,0 +1,15 @@
+{
+  "network": "X Layer Testnet",
+  "chainId": 195,
+  "rpc": "https://testrpc.xlayer.tech",
+  "explorer": "https://www.oklink.com/xlayer-test",
+  "contracts": {
+    "MockUSDT": "",
+    "WarChest": "",
+    "FactionRegistry": "",
+    "TerritoryMap": "",
+    "MatchOracle": ""
+  },
+  "deployer": "",
+  "deployedAt": ""
+}

@@ -1,0 +1,17 @@
+# Dependencies
+contracts/out/
+contracts/cache/
+node_modules/
+
+# Environment
+.env
+.env.*
+
+# OS
+.DS_Store
+__MACOSX/
+
+# IDE
+.idea/
+.vscode/
+contracts/lib/
