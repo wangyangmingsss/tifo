@@ -62,9 +62,23 @@ tifo/
 cd contracts
 forge install foundry-rs/forge-std  # if not already installed
 forge build                          # compile (evm_version = paris for X Layer)
-forge test -vvv                      # run 25 tests
-forge coverage                       # target ≥80%
+forge test -vvv                      # run 66 tests (all green)
+forge coverage                       # source coverage ≥99%
 ```
+
+### Test Coverage
+
+66 test cases covering all 5 contracts + 2 libraries. Scripts excluded from coverage (deployment-only).
+
+| File | Lines | Statements | Branches | Functions |
+|---|---|---|---|---|
+| FactionRegistry.sol | 95.83% | 95.65% | 80.00% | 100% |
+| MatchOracle.sol | 100% | 96.43% | 75.00% | 100% |
+| MockUSDT.sol | 100% | 100% | 100% | 100% |
+| TerritoryMap.sol | 99.06% | 99.24% | 94.74% | 100% |
+| WarChest.sol | 100% | 97.53% | 86.67% | 100% |
+| PowerMath.sol | 100% | 100% | 100% | 100% |
+| **Total** | **99.17%** | **98.44%** | **90.38%** | **100%** |
 
 ## Deployment
 
