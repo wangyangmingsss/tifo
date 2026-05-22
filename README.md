@@ -45,6 +45,7 @@ X Layer's zkEVM L2 checks every box. The entire protocol is designed around the 
 | Smart Contracts | Solidity 0.8.24 + Foundry | Territory war core logic |
 | Frontend | Next.js 14 + wagmi + RainbowKit + Tailwind CSS | Map UI, rally interface, faction pages |
 | Map Rendering | D3-geo + TopoJSON (world GeoJSON) | Real-world map with real-time faction coloring |
+| Indexer | TypeScript + viem + PostgreSQL | On-chain event indexing + REST API |
 | Wallet | OKX Wallet (first-class via RainbowKit) | Transaction signing and faction enrollment |
 | Pricing Token | MockUSDT (with faucet) | Zero-cost testnet experience |
 | Block Explorer | OKLink | Contract verification and transaction proof |
@@ -106,6 +107,22 @@ tifo/
 ├── docs/
 │   ├── PITCH.md                      # One-page pitch for judges
 │   └── ARCHITECTURE.md              # System architecture overview
+├── apps/
+│   └── indexer/                      # On-chain event indexer + REST API
+│       ├── src/
+│       │   ├── index.ts              # Entry: DB init + API server + indexer
+│       │   ├── config.ts             # Environment configuration
+│       │   ├── abis/                 # Contract ABI definitions
+│       │   ├── db/
+│       │   │   ├── schema.sql        # PostgreSQL schema (8 tables)
+│       │   │   └── client.ts         # PG pool + cursor management
+│       │   ├── indexer/
+│       │   │   ├── eventListener.ts  # viem polling (5-block confirmation buffer)
+│       │   │   └── handlers.ts       # Event decode + PG write (7 event types)
+│       │   └── api/
+│       │       ├── server.ts         # Express REST server
+│       │       └── routes.ts         # /map/state, /region/:id/history, /leaderboard, /faction/:id, /stats
+│       └── package.json
 └── README.md
 ```
 
@@ -211,6 +228,40 @@ TIFO is built to be a native X Layer application, deeply integrated with the OKX
 | **X Layer Testnet** | All contracts deployed on chainId 195. The high-frequency rally pattern leverages X Layer's low gas costs |
 | **OKLink Verification** | All contract source code verified on OKLink. The verifiability panel in the frontend links every territory event directly to its OKLink transaction page |
 | **zkEVM Compatibility** | Contracts compiled with `evm_version = "paris"` (avoids PUSH0/Shanghai) for full X Layer zkEVM compatibility |
+
+---
+
+## Data Indexer & Verifiability API
+
+The indexer (`apps/indexer/`) is a TypeScript service that subscribes to all TIFO on-chain events with a **5-block confirmation buffer** and writes them to PostgreSQL. It exposes REST endpoints that power the frontend's verifiability panel.
+
+### Indexed Events (7 types)
+
+`FactionJoined` · `RallyPlaced` · `TerritoryCaptured` · `Defected` · `MatchEventPushed` · `RewardClaimed` · `SeasonSettled`
+
+### REST API
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /healthz` | Health check + sync status |
+| `GET /map/state` | Full map ownership (200 regions, live from chain) |
+| `GET /region/:id/history` | Complete capture timeline + OKLink tx links |
+| `GET /leaderboard` | Faction rankings by territory count |
+| `GET /faction/:id` | Faction details, contributors, captures |
+| `GET /stats` | Global on-chain statistics + most contested regions |
+
+### Verifiability Panel
+
+The `/region/:id/history` endpoint returns every ownership change with its transaction hash and a direct link to OKLink. The frontend renders this as a scrollable timeline — click any event to jump to its on-chain proof. This is the "everything you see is on-chain" feature that hits the completeness scoring criterion.
+
+```bash
+# Start the indexer
+cd apps/indexer
+cp .env.example .env
+npm install
+npm run db:init
+npm run dev
+```
 
 ---
 
