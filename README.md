@@ -26,14 +26,18 @@ Every goal, red card, and final whistle from the real World Cup is pushed on-cha
 
 ## Why X Layer
 
-TIFO's core action — `rally()` — is a high-frequency, low-amount transaction. A fan might rally 5-10 times in a single match, spending fractions of a dollar each time. This usage pattern demands:
+TIFO's core action — `rally()` — is a high-frequency, low-amount transaction. A fan might rally 5-10 times in a single match, spending fractions of a dollar each time. This usage pattern is only viable on a chain where gas is nearly free:
 
-- **Cheap gas**: Sub-cent transaction costs so micro-rallies are economically viable
-- **Fast finality**: Map updates must feel instant for the real-time territory visualization
-- **EVM compatibility**: Foundry toolchain, wagmi/viem frontend stack, OKLink verification — all work out of the box
-- **zkEVM security**: Ethereum-grade security inherited through zero-knowledge proofs
+| Requirement | X Layer Delivers |
+|------------|-----------------|
+| **Sub-cent gas** | ~$0.001 per tx — a fan can rally 1,000 times for $1 in total gas |
+| **Fast finality** | Map color changes feel instant for real-time territory visualization |
+| **EVM compatibility** | Standard Foundry + wagmi/viem + OKLink verification toolchain |
+| **zkEVM security** | Ethereum-grade security inherited through zero-knowledge proofs |
 
-X Layer's zkEVM L2 checks every box. The entire protocol is designed around the assumption that gas is cheap enough for fans to rally as often as they cheer.
+X Layer is not "a chain we picked" — it is the **only L2 where TIFO's unit economics work**. On Ethereum mainnet, a $2 rally with a $5 gas fee destroys the experience. On X Layer, micro-rallies are cheaper than sending a text message. The entire protocol is architected around this assumption.
+
+**Composability:** `getMapState()` and `territoryCounts()` are public view functions — anyone on X Layer can build derivatives, leaderboards, or NFT gates on top of TIFO's live territory data. TIFO is designed to be an **on-chain attention layer for the World Cup** on X Layer.
 
 ---
 
@@ -109,29 +113,20 @@ tifo/
 │   ├── PITCH.md                      # One-page pitch for judges
 │   └── ARCHITECTURE.md              # System architecture overview
 ├── apps/
-│   └── indexer/                      # On-chain event indexer + REST API
-│       ├── src/
-│       │   ├── index.ts              # Entry: DB init + API server + indexer
-│       │   ├── config.ts             # Environment configuration
-│       │   ├── abis/                 # Contract ABI definitions
-│       │   ├── db/
-│       │   │   ├── schema.sql        # PostgreSQL schema (8 tables)
-│       │   │   └── client.ts         # PG pool + cursor management
-│       │   ├── indexer/
-│       │   │   ├── eventListener.ts  # viem polling (5-block confirmation buffer)
-│       │   │   └── handlers.ts       # Event decode + PG write (7 event types)
-│       │   └── api/
-│       │       ├── server.ts         # Express REST server
-│       │       └── routes.ts         # /map/state, /region/:id/history, /leaderboard, /faction/:id, /stats
-│       └── package.json
-├── apps/
+│   ├── indexer/                      # On-chain event indexer + REST API
+│   │   ├── src/
+│   │   │   ├── index.ts              # Entry: DB init + API server + indexer
+│   │   │   ├── abis/                 # Contract ABI definitions
+│   │   │   ├── db/schema.sql         # PostgreSQL schema (8 tables)
+│   │   │   ├── indexer/              # viem polling (5-block buffer) + handlers
+│   │   │   └── api/routes.ts         # REST: /map/state, /region/:id/history, /leaderboard, /faction/:id, /stats
+│   │   └── package.json
 │   └── correspondent/                # War Correspondent — auto-tweet agent
 │       ├── src/
 │       │   ├── index.ts              # Entry point
-│       │   ├── config.ts             # Environment configuration
 │       │   ├── factions.ts           # 48 faction names + flag emojis
 │       │   ├── templates.ts          # Tweet generators (3 variants per event)
-│       │   ├── twitter.ts            # X API v2 OAuth 1.0a client
+│       │   ├── twitter.ts            # X API v2 OAuth 1.0a client (zero SDK)
 │       │   └── correspondent.ts      # viem event polling + dispatch logic
 │       └── package.json
 └── README.md
