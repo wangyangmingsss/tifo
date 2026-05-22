@@ -393,16 +393,21 @@ All contracts are deployed and **source-verified** on OKLink.
 
 **Deployer:** `0xA01fb14B58BDB67A8f07977273f8a2cA04078542`
 
-### Live On-Chain Data
+### Live On-Chain Data (Indexed)
 
 | Metric | Value |
 |--------|-------|
 | Regions | 200 |
 | Factions seeded | 48 |
-| Rally rounds per fan | 5 |
+| Rallies indexed | 34 |
+| Territory captures | 2 |
+| Match events pushed | 2 |
+| Faction joins | 6 |
+| Unique users | 7 |
+| Active factions | 6 |
 | Total on-chain transactions | 300+ (rallies, joins, captures, surges) |
 
-> Every number in the frontend is verifiable on X Layer. Click any event to jump to its OKLink transaction page.
+> Every number in the frontend is reconstructed from on-chain event logs on X Layer (chainId 195). Verify any transaction via OKLink.
 
 ---
 
@@ -422,13 +427,21 @@ Every color change on the map is a verifiable X Layer transaction.
 
 ## Server Deployment (Indexer + Correspondent)
 
-The Indexer and Correspondent services run on a server with PostgreSQL, providing real-time data to the frontend.
+The Indexer and Correspondent services require a server with PostgreSQL to run, providing real-time indexed data to the frontend.
+
+### Current Status
+
+| Service | Status | Notes |
+|---------|--------|-------|
+| PostgreSQL | Running | Database `tifo`, 8 tables + 13 indexes |
+| Indexer | Running | Polling X Layer Testnet, REST API on port 4000 |
+| Correspondent | Running (DRY_RUN) | Monitoring events, set `DRY_RUN=false` + X OAuth creds for live tweets |
 
 ### Architecture
 
 ```
-Server (76.13.189.224)
-├── PostgreSQL 16           # 8 indexed tables + cursor state
+Server
+├── PostgreSQL 16/17        # 8 indexed tables + cursor state
 ├── TIFO Indexer            # Port 4000 — event indexing + REST API
 ├── TIFO Correspondent      # Auto-tweet agent (DRY_RUN or LIVE)
 └── Nginx                   # Reverse proxy: /api/* → :4000
@@ -478,6 +491,34 @@ Once deployed, the Indexer REST API is available at:
 - Via Nginx: `http://<server-ip>/api`
 
 Frontend should set `NEXT_PUBLIC_INDEXER_URL=http://<server-ip>:4000` (or the Nginx URL) in `.env.local`.
+
+### API Response Examples
+
+**GET /healthz**
+```json
+{
+  "status": "ok",
+  "chainBlockNumber": "31033280",
+  "lastIndexedBlock": "31004800",
+  "database": "connected"
+}
+```
+
+**GET /stats** (summary)
+```json
+{
+  "chain": { "chainId": 195, "network": "X Layer Testnet", "regionCount": 200 },
+  "totals": {
+    "rallies": 34, "captures": 2, "defections": 0,
+    "matchEvents": 2, "factionJoins": 6, "uniqueUsers": 7, "activeFactions": 6
+  },
+  "verifiabilityNote": "Every number here is reconstructed from on-chain event logs on X Layer (chainId 195)."
+}
+```
+
+**GET /region/0/history** — includes full capture timeline with OKLink tx proof links.
+
+**GET /leaderboard** — 48 factions ranked by `territoriesHeld`, with `totalRallies`, `uniqueSupporters`, `capturesWon`.
 
 ### Deployment Files
 
