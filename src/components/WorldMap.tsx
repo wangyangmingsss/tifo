@@ -190,7 +190,41 @@ export default function WorldMap({ mapState, onSelectRegion }: WorldMapProps) {
                   .attr('stroke', '#0d0d1a')
                   .attr('stroke-width', 0.5);
                 tooltip.style('opacity', '0');
-              }),
+              })
+              .on('touchstart', (event, d) => {
+                event.preventDefault();
+                const factionId = mapState[d.id];
+                const faction = factionId !== undefined && factionId !== NO_FACTION ? getFactionById(factionId) : null;
+                const name = getCountryName(d.id);
+
+                d3.select(event.currentTarget as Element)
+                  .attr('stroke', '#fbbf24')
+                  .attr('stroke-width', 1.5)
+                  .raise();
+
+                tooltip
+                  .style('opacity', '1')
+                  .html(
+                    `<div class="font-semibold">${name}</div>` +
+                    `<div class="text-xs text-gray-400">${faction ? `Owned by ${faction.name}` : 'Neutral'}</div>`,
+                  );
+
+                const touch = event.touches[0];
+                if (touch) {
+                  const rect = container.getBoundingClientRect();
+                  tooltip
+                    .style('left', `${touch.clientX - rect.left + 12}px`)
+                    .style('top', `${touch.clientY - rect.top - 10}px`);
+                }
+              }, { passive: false } as never)
+              .on('touchend', (event, d) => {
+                event.preventDefault();
+                d3.select(event.currentTarget as Element)
+                  .attr('stroke', '#0d0d1a')
+                  .attr('stroke-width', 0.5);
+                tooltip.style('opacity', '0');
+                handleClick(d.id);
+              }, { passive: false } as never),
           (update) =>
             update
               .transition()

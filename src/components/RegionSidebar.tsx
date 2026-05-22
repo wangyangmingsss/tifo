@@ -126,8 +126,10 @@ export default function RegionSidebar({ regionId, ownerFactionId, onClose }: Reg
   const maxPower = powerRankings.length > 0 ? powerRankings[0].power : 1;
 
   return (
-    <div className="fixed top-0 right-0 h-full w-[380px] max-w-full z-30 animate-slide-in-right">
-      <div className="h-full bg-gray-900/95 backdrop-blur-md border-l border-gray-700/50 flex flex-col overflow-hidden shadow-2xl">
+    <div className="fixed inset-0 sm:inset-auto sm:top-0 sm:right-0 sm:h-full w-full sm:w-[380px] z-30">
+      {/* Mobile backdrop */}
+      <div className="absolute inset-0 mobile-backdrop sm:hidden" onClick={onClose} />
+      <div className="relative h-full bg-gray-900/95 backdrop-blur-md border-l border-gray-700/50 flex flex-col overflow-hidden shadow-2xl animate-slide-up sm:animate-slide-in-right safe-bottom">
 
         {/* ── Header ─────────────────────────────────────────── */}
         <div className="flex-shrink-0 p-4 border-b border-gray-700/50">

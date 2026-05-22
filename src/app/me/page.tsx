@@ -11,6 +11,21 @@ import { useAccount, useReadContract, useWriteContract, useWaitForTransactionRec
 
 /* ── Flag map ────────────────────────────────────────────────────────────── */
 
+function parseContractError(error: Error | null | undefined): string | null {
+  if (!error) return null;
+  const msg = error.message ?? '';
+  const revertMap: Record<string, string> = {
+    NotEnrolled: 'You must join a faction first',
+    AlreadyEnrolled: 'You are already enrolled in a faction',
+    InvalidFaction: 'This faction does not exist',
+    TransferFailed: 'Token transfer failed',
+  };
+  for (const [reason, friendly] of Object.entries(revertMap)) {
+    if (msg.includes(reason)) return friendly;
+  }
+  return msg.slice(0, 200);
+}
+
 const FACTION_FLAGS: Record<string, string> = {
   AR: '\u{1F1E6}\u{1F1F7}', BR: '\u{1F1E7}\u{1F1F7}', UY: '\u{1F1FA}\u{1F1FE}', CO: '\u{1F1E8}\u{1F1F4}', EC: '\u{1F1EA}\u{1F1E8}', PY: '\u{1F1F5}\u{1F1FE}',
   FR: '\u{1F1EB}\u{1F1F7}', ES: '\u{1F1EA}\u{1F1F8}', GB: '\u{1F1EC}\u{1F1E7}', DE: '\u{1F1E9}\u{1F1EA}', PT: '\u{1F1F5}\u{1F1F9}', NL: '\u{1F1F3}\u{1F1F1}',
@@ -30,7 +45,7 @@ export default function MePage() {
 
   /* ── On-chain reads (only when connected) ──────────────────────────────── */
 
-  const { data: isEnrolled } = useReadContract({
+  const { data: isEnrolled, isLoading: enrollLoading } = useReadContract({
     address: CONTRACTS.FactionRegistry as `0x${string}`,
     abi: FactionRegistryABI,
     functionName: 'isEnrolled',
@@ -55,12 +70,12 @@ export default function MePage() {
 
   /* ── Join faction tx ───────────────────────────────────────────────────── */
 
-  const { writeContract: joinFaction, data: joinHash, isPending: joinPending } = useWriteContract();
+  const { writeContract: joinFaction, data: joinHash, isPending: joinPending, error: joinError, reset: resetJoinError } = useWriteContract();
   const { isLoading: joinConfirming, isSuccess: joinSuccess } = useWaitForTransactionReceipt({ hash: joinHash });
 
   /* ── Defect tx ─────────────────────────────────────────────────────────── */
 
-  const { writeContract: defect, data: defectHash, isPending: defectPending } = useWriteContract();
+  const { writeContract: defect, data: defectHash, isPending: defectPending, error: defectError, reset: resetDefectError } = useWriteContract();
   const { isLoading: defectConfirming } = useWaitForTransactionReceipt({ hash: defectHash });
 
   /* ── Derived ───────────────────────────────────────────────────────────── */
@@ -140,8 +155,13 @@ export default function MePage() {
           {address?.slice(0, 6)}...{address?.slice(-4)}
         </p>
 
-        {/* ── NOT ENROLLED ───────────────────────────────────────────────── */}
-        {!isEnrolled && !joinSuccess ? (
+        {/* ── LOADING ────────────────────────────────────────────────────── */}
+        {enrollLoading ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-4">
+            <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm text-gray-400">Checking enrollment...</p>
+          </div>
+        ) : !isEnrolled && !joinSuccess ? (
           <section>
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-6 mb-8">
               <h2 className="text-xl font-bold mb-2">Join a Faction</h2>
@@ -169,18 +189,25 @@ export default function MePage() {
               </div>
 
               {selectedFaction !== null && (
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl">{FACTION_FLAGS[FACTIONS[selectedFaction].anchor] ?? ''}</span>
-                    <span className="font-semibold">{FACTIONS[selectedFaction].name}</span>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">{FACTION_FLAGS[FACTIONS[selectedFaction].anchor] ?? ''}</span>
+                      <span className="font-semibold">{FACTIONS[selectedFaction].name}</span>
+                    </div>
+                    <button
+                      onClick={() => { resetJoinError(); handleJoin(); }}
+                      disabled={joinPending || joinConfirming}
+                      className="ml-auto rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-3 font-bold text-gray-950 transition-all hover:scale-[1.03] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {joinPending || joinConfirming ? 'Confirming...' : 'Join Faction'}
+                    </button>
                   </div>
-                  <button
-                    onClick={handleJoin}
-                    disabled={joinPending || joinConfirming}
-                    className="ml-auto rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-3 font-bold text-gray-950 transition-all hover:scale-[1.03] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {joinPending || joinConfirming ? 'Confirming...' : 'Join Faction'}
-                  </button>
+                  {joinError && (
+                    <div className="rounded-lg bg-red-950/40 border border-red-800/50 px-4 py-2">
+                      <p className="text-sm text-red-400">{parseContractError(joinError)}</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -243,12 +270,17 @@ export default function MePage() {
                       You can defect to reclaim your stake.
                     </p>
                     <button
-                      onClick={() => handleDefect(0)}
+                      onClick={() => { resetDefectError(); handleDefect(0); }}
                       disabled={defectPending || defectConfirming}
                       className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-50"
                     >
                       {defectPending || defectConfirming ? 'Processing...' : 'Defect & Reclaim'}
                     </button>
+                    {defectError && (
+                      <div className="mt-2 rounded-lg bg-red-950/40 border border-red-800/50 px-4 py-2">
+                        <p className="text-sm text-red-400">{parseContractError(defectError)}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

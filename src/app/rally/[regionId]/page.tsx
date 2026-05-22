@@ -13,6 +13,26 @@ import { regionIdToCountry, getCountryName, isValidRegion } from '@/config/regio
 import { getFactionById, NO_FACTION } from '@/config/factions';
 
 // ---------------------------------------------------------------------------
+// Parse Solidity revert reasons into user-friendly messages
+// ---------------------------------------------------------------------------
+const REVERT_MAP: Record<string, string> = {
+  NotEnrolled: 'You must join a faction first',
+  ZeroAmount: 'Amount must be greater than zero',
+  InvalidRegion: 'This region does not exist',
+  InsufficientBalance: 'Insufficient mUSDT balance',
+  InsufficientAllowance: 'Token approval required',
+  TransferFailed: 'Token transfer failed. Check your balance and approval.',
+};
+
+function parseContractError(error: Error | string): string {
+  const msg = typeof error === 'string' ? error : error.message ?? '';
+  for (const [reason, friendly] of Object.entries(REVERT_MAP)) {
+    if (msg.includes(reason)) return friendly;
+  }
+  return msg.slice(0, 200);
+}
+
+// ---------------------------------------------------------------------------
 // Underdog bonus calculation (mirrors contract logic client-side)
 // ---------------------------------------------------------------------------
 function calcEffectiveAmount(
@@ -162,7 +182,7 @@ export default function RallyPage({ params }: { params: { regionId: string } }) 
       }, {
         onError: (err) => {
           setPhase('error');
-          setErrorMsg(err.message.slice(0, 200));
+          setErrorMsg(parseContractError(err));
         },
       });
     }
@@ -201,7 +221,7 @@ export default function RallyPage({ params }: { params: { regionId: string } }) 
       }, {
         onError: (err) => {
           setPhase('error');
-          setErrorMsg(err.message.slice(0, 200));
+          setErrorMsg(parseContractError(err));
         },
       });
     } else {
@@ -214,7 +234,7 @@ export default function RallyPage({ params }: { params: { regionId: string } }) 
       }, {
         onError: (err) => {
           setPhase('error');
-          setErrorMsg(err.message.slice(0, 200));
+          setErrorMsg(parseContractError(err));
         },
       });
     }

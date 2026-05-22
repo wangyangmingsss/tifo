@@ -9,7 +9,7 @@ interface MapLegendProps {
 }
 
 export default function MapLegend({ territoryCounts }: MapLegendProps) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   // Sort factions by territory count descending, take top 10
   const ranked: { faction: Faction; count: number }[] = FACTIONS

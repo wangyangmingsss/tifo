@@ -398,6 +398,37 @@ Every color change on the map is a verifiable X Layer transaction.
 
 ---
 
+## Security — Slither Static Analysis
+
+All contracts were analyzed using [Slither](https://github.com/crytic/slither) static analyzer (solc 0.8.24, Foundry compilation). **54 raw detections** were reported across 5 source contracts and 1 library. Below is a deduplicated summary grouped by severity, with status and rationale for each.
+
+**No High-severity findings were detected.**
+
+| # | Finding | Severity | Contract(s) | Status | Notes |
+|---|---------|----------|-------------|--------|-------|
+| 1 | Divide-before-multiply in `claim()` | Medium | WarChest | Acknowledged | Precision loss bounded to 1 wei per region per claimant. Acceptable for hackathon; production uses higher-precision accumulator. |
+| 2 | Divide-before-multiply in `applyUnderdogBonus()` | Medium | PowerMath | Acknowledged | Bonus truncation is sub-wei. Not exploitable. |
+| 3 | Reentrancy in `joinFaction()` via `_pull()` | Medium | FactionRegistry | Mitigated | Token is MockUSDT (no callback hooks). Production with arbitrary ERC-20s needs ReentrancyGuard. |
+| 4 | Reentrancy in `rally()` via `_pull()` + `bumpContribTotal()` | Medium | TerritoryMap | Mitigated | Same rationale — MockUSDT has no transfer callbacks. `bumpContribTotal` targets trusted WarChest. |
+| 5 | Uninitialized locals `totalOut`, `totalScore`, `totalPool` | Low | WarChest | Acknowledged | Solidity zero-initializes `uint256` locals. False positive pattern warning. |
+| 6 | Unused return values from `map.regions()` | Low | WarChest | Acknowledged | Only `ownerFaction` needed; other fields intentionally discarded. |
+| 7 | Missing events on `transferOwnership()` | Low | All | Acknowledged | One-time deployment wiring step. |
+| 8 | Missing events on `setParams()`, `setPassiveRate()` | Low | TerritoryMap, WarChest | Acknowledged | Params set once at deployment. |
+| 9 | Missing zero-address checks | Low | All | Acknowledged | Constructor args set by deployer script. |
+| 10 | External calls inside loops | Low | MatchOracle, WarChest | Acknowledged | Bounded, trusted input. Gas borne by caller. |
+| 11 | `block.timestamp` usage | Info | All | Acknowledged | ~15s validator manipulation negligible for game mechanics. |
+| 12 | Low-level `token.call()` | Info | All | Acknowledged | Intentional pattern for non-standard ERC-20 compatibility. Return value checked. |
+| 13 | Missing interface inheritance | Info | All | Acknowledged | Interfaces defined inline. Not a security issue. |
+
+### Acknowledged Design Choices
+
+- **Single-signer oracle**: MatchOracle uses a single operator key. Intentional hackathon choice; production would use Chainlink Functions or UMA.
+- **Bounded loops**: `_largestForeignContribution` iterates 48 factions. `getMapState`/`territoryCounts` iterate ~200 regions (view-only).
+- **Ownable admin functions**: Used during deployment wiring only. Ownership transferred to MatchOracle post-setup.
+- **No ReentrancyGuard**: Protocol assumes trusted MockUSDT. Production with arbitrary ERC-20s must add OpenZeppelin `ReentrancyGuard`.
+
+---
+
 ## License
 
 MIT

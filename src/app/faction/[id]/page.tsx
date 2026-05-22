@@ -44,26 +44,26 @@ export default function FactionDetailPage({ params }: { params: Promise<{ id: st
 
   /* ── On-chain reads ────────────────────────────────────────────────────── */
 
-  const { data: rawCounts } = useReadContract({
+  const { data: rawCounts, isLoading: countsLoading } = useReadContract({
     address: CONTRACTS.TerritoryMap as `0x${string}`,
     abi: TerritoryMapABI,
     functionName: 'territoryCounts',
   });
 
-  const { data: mapState } = useReadContract({
+  const { data: mapState, isLoading: mapLoading } = useReadContract({
     address: CONTRACTS.TerritoryMap as `0x${string}`,
     abi: TerritoryMapABI,
     functionName: 'getMapState',
   });
 
-  const { data: rawPrizePool } = useReadContract({
+  const { data: rawPrizePool, isLoading: prizeLoading } = useReadContract({
     address: CONTRACTS.WarChest as `0x${string}`,
     abi: WarChestABI,
     functionName: 'factionPrizePool',
     args: [factionId],
   });
 
-  const { data: rawMemberCount } = useReadContract({
+  const { data: rawMemberCount, isLoading: memberLoading } = useReadContract({
     address: CONTRACTS.FactionRegistry as `0x${string}`,
     abi: FactionRegistryABI,
     functionName: 'memberCount',
@@ -102,6 +102,20 @@ export default function FactionDetailPage({ params }: { params: Promise<{ id: st
         <div className="flex flex-col items-center justify-center pt-32 gap-4">
           <p className="text-2xl font-bold text-red-400">Faction not found</p>
           <Link href="/leaderboard" className="text-amber-400 hover:underline">Back to Leaderboard</Link>
+        </div>
+      </div>
+    );
+  }
+
+  const isLoading = countsLoading || mapLoading || prizeLoading || memberLoading;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-950 text-white">
+        <Navbar />
+        <div className="flex flex-col items-center justify-center pt-32 gap-4">
+          <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-gray-400">Loading faction data...</p>
         </div>
       </div>
     );
@@ -189,23 +203,24 @@ export default function FactionDetailPage({ params }: { params: Promise<{ id: st
         {/* ── Top contributors (mock) ────────────────────────────────────── */}
         <section>
           <h2 className="text-lg font-bold mb-4">Top Contributors</h2>
-          <div className="rounded-xl border border-gray-800 bg-gray-900/50 backdrop-blur overflow-hidden">
+          <div className="rounded-xl border border-gray-800 bg-gray-900/50 backdrop-blur overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-800 text-gray-500 text-xs uppercase tracking-wider">
-                  <th className="px-4 py-3 text-left w-10">#</th>
-                  <th className="px-4 py-3 text-left">Address</th>
-                  <th className="px-4 py-3 text-right">Contributed (USDT)</th>
+                  <th className="px-3 sm:px-4 py-3 text-left w-10">#</th>
+                  <th className="px-3 sm:px-4 py-3 text-left">Address</th>
+                  <th className="px-3 sm:px-4 py-3 text-right whitespace-nowrap">Contributed (USDT)</th>
                 </tr>
               </thead>
               <tbody>
                 {mockContributors.map((c, i) => (
                   <tr key={i} className="border-b border-gray-800/40 hover:bg-gray-800/30 transition-colors">
-                    <td className="px-4 py-2.5 text-gray-500 font-mono">{i + 1}</td>
-                    <td className="px-4 py-2.5 font-mono text-xs text-gray-300">
-                      {c.address.slice(0, 6)}...{c.address.slice(-4)}
+                    <td className="px-3 sm:px-4 py-2.5 text-gray-500 font-mono">{i + 1}</td>
+                    <td className="px-3 sm:px-4 py-2.5 font-mono text-xs text-gray-300">
+                      <span className="sm:hidden">{c.address.slice(0, 6)}...{c.address.slice(-4)}</span>
+                      <span className="hidden sm:inline">{c.address.slice(0, 10)}...{c.address.slice(-6)}</span>
                     </td>
-                    <td className="px-4 py-2.5 text-right font-semibold tabular-nums">{c.amount.toLocaleString()}</td>
+                    <td className="px-3 sm:px-4 py-2.5 text-right font-semibold tabular-nums">{c.amount.toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
