@@ -74,7 +74,16 @@ tifo/
 ├── src/                          # Next.js 14 App Router frontend
 │   ├── app/
 │   │   ├── page.tsx                  # Landing page: hero + live stats + CTA
-│   │   └── map/page.tsx              # Interactive real-time world map
+│   │   ├── map/page.tsx              # Interactive real-time world map
+│   │   ├── rally/[regionId]/page.tsx # Rally panel: slider + underdog preview + wagmi tx
+│   │   ├── faction/[id]/
+│   │   │   ├── page.tsx              # Faction details: territories, prize pool, members
+│   │   │   ├── layout.tsx            # Dynamic metadata + OG tags
+│   │   │   └── opengraph-image.tsx   # Dynamic 1200×630 OG image per faction
+│   │   ├── me/
+│   │   │   ├── page.tsx              # My war record: faction, contributions, defection
+│   │   │   └── opengraph-image.tsx   # Dynamic OG image for profile sharing
+│   │   └── leaderboard/page.tsx      # 48-faction real-time territory rankings
 │   ├── components/
 │   │   ├── WorldMap.tsx              # D3-geo + TopoJSON map with faction coloring
 │   │   ├── WorldMapPreview.tsx       # Mini map preview for homepage hero
@@ -87,7 +96,7 @@ tifo/
 │   │   ├── contracts.ts              # Contract addresses + chain config + OKLink helpers
 │   │   ├── regionMapping.ts          # ISO 3166-1 → region ID mapping (177 countries)
 │   │   ├── wagmi.ts                  # Wagmi/RainbowKit provider config
-│   │   └── abi/                      # Contract ABIs (TerritoryMap, FactionRegistry, MockUSDT)
+│   │   └── abi/                      # Contract ABIs (TerritoryMap, FactionRegistry, MockUSDT, WarChest)
 │   └── providers/
 │       └── Web3Provider.tsx          # WagmiProvider + QueryClient + RainbowKit
 ├── public/
@@ -168,6 +177,27 @@ The social-game core. When a region flips from Faction A to Faction B, former Fa
 - **20%** goes to the defector as a finder's reward (contribution credit under Faction B)
 
 Defection is bounded: the contract iterates over 48 factions to find the caller's largest foreign contribution -- a constant-gas operation.
+
+---
+
+## Frontend Pages
+
+| Route | Page | Description |
+|-------|------|-------------|
+| `/` | Landing Page | Hero with animated world map preview, live stats counter, how-it-works guide |
+| `/map` | Territory Map | Full-screen D3-geo world map colored by faction ownership. Click any region for details + rally button |
+| `/rally/[regionId]` | Rally Panel | Slider to select commit amount, real-time underdog bonus preview, power change prediction, wagmi `rally()` transaction with approve flow |
+| `/faction/[id]` | Faction Details | Territory count, WarChest prize pool, member count, owned regions list, top contributors |
+| `/me` | My War Record | Faction enrollment (join/switch), contribution stats, defection opportunities, share on X |
+| `/leaderboard` | Faction Leaderboard | 48 factions ranked by territory count, gold/silver/bronze top-3 styling |
+
+### Dynamic OG Images (Social Sharing)
+
+Both `/faction/[id]` and `/me` generate dynamic 1200x630 Open Graph images via `next/og`:
+- **Faction OG**: Faction name, code, color accent, confederation, stats summary, `@0xWangyangming` branding
+- **Profile OG**: War record branding with TIFO identity, `@0xWangyangming` + X Layer attribution
+
+These ensure tweet/share previews display rich, faction-specific cards that drive social engagement.
 
 ---
 

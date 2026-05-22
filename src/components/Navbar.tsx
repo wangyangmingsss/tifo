@@ -24,7 +24,7 @@ export default function Navbar() {
         <Link href="/leaderboard" className="transition-colors hover:text-white">
           Leaderboard
         </Link>
-        <Link href="/profile" className="transition-colors hover:text-white">
+        <Link href="/me" className="transition-colors hover:text-white">
           My Profile
         </Link>
       </div>
