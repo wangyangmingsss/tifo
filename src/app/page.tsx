@@ -1,19 +1,63 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import Navbar from '@/components/Navbar';
 import WorldMapPreview from '@/components/WorldMapPreview';
 import StatsCounter from '@/components/StatsCounter';
 
-const STATS = [
-  { label: 'Total Rallies', value: 12847, icon: '\u{1F525}' },
-  { label: 'Territory Captures', value: 3291, icon: '\u{2694}\uFE0F' },
-  { label: 'Active Factions', value: 48, icon: '\u{1F3F3}\uFE0F' },
-  { label: 'On-Chain Txns', value: 28445, icon: '\u{26D3}\uFE0F' },
+const INDEXER_API = process.env.NEXT_PUBLIC_INDEXER_API || '';
+
+// Fallback defaults shown while loading or if Indexer is unreachable
+const DEFAULT_STATS = [
+  { label: 'Total Rallies', value: 0, icon: '\u{1F525}' },
+  { label: 'Territory Captures', value: 0, icon: '\u{2694}\uFE0F' },
+  { label: 'Active Factions', value: 0, icon: '\u{1F3F3}\uFE0F' },
+  { label: 'On-Chain Txns', value: 0, icon: '\u{26D3}\uFE0F' },
 ];
 
 export default function Home() {
+  const [stats, setStats] = useState(DEFAULT_STATS);
+
+  // Fetch live stats from Indexer /stats endpoint
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchStats() {
+      if (!INDEXER_API) return;
+      try {
+        const res = await fetch(`${INDEXER_API}/stats`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+
+        const totals = data.totals || {};
+        setStats([
+          { label: 'Total Rallies', value: totals.rallies || 0, icon: '\u{1F525}' },
+          { label: 'Territory Captures', value: totals.captures || 0, icon: '\u{2694}\uFE0F' },
+          { label: 'Active Factions', value: totals.activeFactions || 0, icon: '\u{1F3F3}\uFE0F' },
+          {
+            label: 'On-Chain Txns',
+            value:
+              (totals.rallies || 0) +
+              (totals.captures || 0) +
+              (totals.defections || 0) +
+              (totals.factionJoins || 0) +
+              (totals.matchEvents || 0),
+            icon: '\u{26D3}\uFE0F',
+          },
+        ]);
+      } catch {
+        // Keep defaults on error
+      }
+    }
+
+    fetchStats();
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchStats, 30_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
   return (
     <div className="min-h-screen bg-gray-950 text-white">
       <Navbar />
@@ -67,7 +111,7 @@ export default function Home() {
       {/* === STATS BAR === */}
       <section className="relative py-16 px-4">
         <div className="mx-auto max-w-4xl grid grid-cols-2 md:grid-cols-4 gap-4">
-          {STATS.map((s) => (
+          {stats.map((s) => (
             <StatsCounter
               key={s.label}
               label={s.label}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { FACTIONS, NO_FACTION, getFactionById, type Faction } from '@/config/factions';
 import { oklinkTx } from '@/config/contracts';
 import { getCountryName, regionIdToCountry } from '@/config/regionMapping';
@@ -46,7 +46,10 @@ function getFlag(numericId: string): string {
   return ISO_TO_FLAG[numericId] ?? '🏳️';
 }
 
-// ── Mock data generators ───────────────────────────────────────────────────────
+// ── Indexer API base URL ──────────────────────────────────────────────────────
+const INDEXER_API = process.env.NEXT_PUBLIC_INDEXER_API || '';
+
+// ── Fallback mock data generators (used when Indexer is unreachable) ──────────
 
 function seededRandom(seed: number): () => number {
   let s = seed;
@@ -56,13 +59,12 @@ function seededRandom(seed: number): () => number {
   };
 }
 
-function generatePowerRankings(regionId: number, ownerFactionId: number): PowerEntry[] {
+function generateMockPowerRankings(regionId: number, ownerFactionId: number): PowerEntry[] {
   const rng = seededRandom(regionId * 7 + 42);
-  const count = 3 + Math.floor(rng() * 3); // 3–5 factions
+  const count = 3 + Math.floor(rng() * 3);
   const usedIds = new Set<number>();
   const entries: PowerEntry[] = [];
 
-  // Owner always first with highest power
   if (ownerFactionId !== NO_FACTION) {
     const f = getFactionById(ownerFactionId);
     if (f) {
@@ -84,18 +86,17 @@ function generatePowerRankings(regionId: number, ownerFactionId: number): PowerE
   return entries.sort((a, b) => b.power - a.power);
 }
 
-function generateCaptureHistory(regionId: number): CaptureEvent[] {
+function generateMockCaptureHistory(regionId: number): CaptureEvent[] {
   const rng = seededRandom(regionId * 13 + 99);
-  const count = 2 + Math.floor(rng() * 5); // 2–6 events
+  const count = 2 + Math.floor(rng() * 5);
   const events: CaptureEvent[] = [];
-  const baseTime = 1716300000; // May 2024
+  const baseTime = 1716300000;
 
   for (let i = 0; i < count; i++) {
     const oldId = i === 0 ? NO_FACTION : Math.floor(rng() * FACTIONS.length);
     let newId = Math.floor(rng() * FACTIONS.length);
     while (newId === oldId) newId = Math.floor(rng() * FACTIONS.length);
 
-    // Generate a realistic-looking tx hash
     let hash = '0x';
     for (let j = 0; j < 64; j++) {
       hash += Math.floor(rng() * 16).toString(16);
@@ -121,8 +122,75 @@ export default function RegionSidebar({ regionId, ownerFactionId, onClose }: Reg
   const flag = getFlag(countryId);
   const ownerFaction = ownerFactionId !== NO_FACTION ? getFactionById(ownerFactionId) : null;
 
-  const powerRankings = useMemo(() => generatePowerRankings(regionId, ownerFactionId), [regionId, ownerFactionId]);
-  const captureHistory = useMemo(() => generateCaptureHistory(regionId), [regionId]);
+  // ── Fetch real capture history from Indexer API ──────────────────────────────
+  const [captureHistory, setCaptureHistory] = useState<CaptureEvent[]>([]);
+  const [powerRankings, setPowerRankings] = useState<PowerEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchHistory() {
+      if (!INDEXER_API) {
+        // No indexer configured — use mock data as fallback
+        setPowerRankings(generateMockPowerRankings(regionId, ownerFactionId));
+        setCaptureHistory(generateMockCaptureHistory(regionId));
+        setHistoryLoading(false);
+        return;
+      }
+
+      try {
+        setHistoryLoading(true);
+        const res = await fetch(`${INDEXER_API}/region/${regionId}/history`);
+        if (!res.ok) throw new Error(`API ${res.status}`);
+        const data = await res.json();
+
+        if (cancelled) return;
+
+        // Map capture history from Indexer response
+        const captures: CaptureEvent[] = (data.captureHistory || []).map((c: any) => ({
+          timestamp: typeof c.timestamp === 'string' ? Math.floor(new Date(c.timestamp).getTime() / 1000) : c.timestamp,
+          oldFactionId: c.oldFaction ?? NO_FACTION,
+          newFactionId: c.newFaction,
+          txHash: c.txHash,
+        }));
+        captures.sort((a, b) => b.timestamp - a.timestamp);
+        setCaptureHistory(captures);
+
+        // Build power rankings from recent rallies (aggregate by faction)
+        const factionPower: Record<number, number> = {};
+        for (const r of data.recentRallies || []) {
+          const fid = r.faction;
+          const power = parseFloat(r.effectivePower || r.newFactionPower || '0') / 1e18;
+          factionPower[fid] = (factionPower[fid] || 0) + power;
+        }
+        // Ensure the current owner is represented
+        if (ownerFactionId !== NO_FACTION && !(ownerFactionId in factionPower)) {
+          factionPower[ownerFactionId] = 1;
+        }
+
+        const entries: PowerEntry[] = [];
+        for (const [fidStr, power] of Object.entries(factionPower)) {
+          const f = getFactionById(Number(fidStr));
+          if (f) entries.push({ faction: f, power: Math.round(power) });
+        }
+        entries.sort((a, b) => b.power - a.power);
+        setPowerRankings(entries.length > 0 ? entries : generateMockPowerRankings(regionId, ownerFactionId));
+      } catch {
+        if (!cancelled) {
+          // Fallback to mock on error
+          setPowerRankings(generateMockPowerRankings(regionId, ownerFactionId));
+          setCaptureHistory(generateMockCaptureHistory(regionId));
+        }
+      } finally {
+        if (!cancelled) setHistoryLoading(false);
+      }
+    }
+
+    fetchHistory();
+    return () => { cancelled = true; };
+  }, [regionId, ownerFactionId]);
+
   const maxPower = powerRankings.length > 0 ? powerRankings[0].power : 1;
 
   return (

@@ -1,5 +1,12 @@
 import { defineChain } from 'viem'
-import { getDefaultConfig } from '@rainbow-me/rainbowkit'
+import { connectorsForWallets } from '@rainbow-me/rainbowkit'
+import {
+  okxWallet,
+  metaMaskWallet,
+  walletConnectWallet,
+  coinbaseWallet,
+} from '@rainbow-me/rainbowkit/wallets'
+import { createConfig, http } from 'wagmi'
 
 export const xLayerTestnet = defineChain({
   id: 195,
@@ -14,9 +21,32 @@ export const xLayerTestnet = defineChain({
   testnet: true,
 })
 
-export const config = getDefaultConfig({
-  appName: 'TIFO',
-  projectId: 'tifo-2026',
+const projectId = 'tifo-2026'
+
+// OKX Wallet is the first-class connector — placed at the top of the list
+// so it appears as the primary recommended wallet in the connect modal.
+const connectors = connectorsForWallets(
+  [
+    {
+      groupName: 'Recommended',
+      wallets: [okxWallet],
+    },
+    {
+      groupName: 'Other Wallets',
+      wallets: [metaMaskWallet, walletConnectWallet, coinbaseWallet],
+    },
+  ],
+  {
+    appName: 'TIFO',
+    projectId,
+  },
+)
+
+export const config = createConfig({
+  connectors,
   chains: [xLayerTestnet],
+  transports: {
+    [xLayerTestnet.id]: http(),
+  },
   ssr: true,
 })
