@@ -420,6 +420,76 @@ Every color change on the map is a verifiable X Layer transaction.
 
 ---
 
+## Server Deployment (Indexer + Correspondent)
+
+The Indexer and Correspondent services run on a server with PostgreSQL, providing real-time data to the frontend.
+
+### Architecture
+
+```
+Server (76.13.189.224)
+├── PostgreSQL 16           # 8 indexed tables + cursor state
+├── TIFO Indexer            # Port 4000 — event indexing + REST API
+├── TIFO Correspondent      # Auto-tweet agent (DRY_RUN or LIVE)
+└── Nginx                   # Reverse proxy: /api/* → :4000
+```
+
+### Quick Deploy (Bare Metal)
+
+```bash
+# One-command server setup (Ubuntu/Debian)
+ssh root@<server-ip> 'bash -s' < deploy/setup-server.sh
+
+# Or step by step:
+ssh root@<server-ip>
+git clone https://github.com/wangyangmingsss/tifo.git /opt/tifo
+cd /opt/tifo && bash deploy/setup-server.sh
+```
+
+### Quick Deploy (Docker Compose)
+
+```bash
+git clone https://github.com/wangyangmingsss/tifo.git
+cd tifo
+docker-compose up -d
+# API available at http://localhost:4000
+```
+
+### Service Management
+
+```bash
+# View service status
+systemctl status tifo-indexer
+systemctl status tifo-correspondent
+
+# View logs
+journalctl -u tifo-indexer -f
+journalctl -u tifo-correspondent -f
+
+# Restart services
+systemctl restart tifo-indexer
+systemctl restart tifo-correspondent
+```
+
+### API Base URL
+
+Once deployed, the Indexer REST API is available at:
+- Direct: `http://<server-ip>:4000`
+- Via Nginx: `http://<server-ip>/api`
+
+Frontend should set `NEXT_PUBLIC_INDEXER_URL=http://<server-ip>:4000` (or the Nginx URL) in `.env.local`.
+
+### Deployment Files
+
+| File | Purpose |
+|------|---------|
+| `deploy/setup-server.sh` | One-command bare-metal setup (PostgreSQL + Node.js + systemd + Nginx) |
+| `docker-compose.yml` | Docker Compose for PostgreSQL + Indexer + Correspondent |
+| `apps/indexer/Dockerfile` | Indexer container image |
+| `apps/correspondent/Dockerfile` | Correspondent container image |
+
+---
+
 ## Security — Slither Static Analysis
 
 All contracts were analyzed using [Slither](https://github.com/crytic/slither) static analyzer (solc 0.8.24, Foundry compilation). **54 raw detections** were reported across 5 source contracts and 1 library. Below is a deduplicated summary grouped by severity, with status and rationale for each.

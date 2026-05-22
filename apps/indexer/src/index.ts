@@ -1,15 +1,24 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { readFileSync, existsSync } from 'fs';
+import { join, resolve } from 'path';
 import { getPool } from './db/client';
 import { EventIndexer } from './indexer/eventListener';
 import { startServer } from './api/server';
 
 async function initDatabase() {
   const pool = getPool();
-  const schemaPath = join(__dirname, 'db', 'schema.sql');
+  // Try multiple possible locations for schema.sql
+  const candidates = [
+    join(__dirname, 'db', 'schema.sql'),           // dist/db/schema.sql
+    resolve(__dirname, '..', 'src', 'db', 'schema.sql'), // src/db/schema.sql (from dist/)
+  ];
+  let schemaPath = candidates.find(p => existsSync(p));
+  if (!schemaPath) {
+    console.error('[main] schema.sql not found in:', candidates);
+    process.exit(1);
+  }
   const schema = readFileSync(schemaPath, 'utf-8');
   console.log('[main] Initializing database schema...');
   await pool.query(schema);

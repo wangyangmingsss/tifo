@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tifo
+      POSTGRES_PASSWORD: tifo
+      POSTGRES_DB: tifo
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./apps/indexer/src/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tifo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  indexer:
+    build:
+      context: ./apps/indexer
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://tifo:tifo@postgres:5432/tifo
+      RPC_URL: https://testrpc.xlayer.tech
+      CHAIN_ID: "195"
+      FACTION_REGISTRY: "0x80449696e9F2DBEBC7F154805320f49ae5aA6E23"
+      TERRITORY_MAP: "0x4987CFAF2CA1650887786C83746CcEC4d4941331"
+      WAR_CHEST: "0x2E587e2E830D637B80e3a23db7001a92582f1352"
+      MATCH_ORACLE: "0x57E585543940cCfAB71141d84A419C3F7872d5be"
+      MOCK_USDT: "0x212E0207999B982b2F4B8f91cA421D94dc8438e3"
+      CONFIRMATION_BLOCKS: "5"
+      POLL_INTERVAL_MS: "3000"
+      START_BLOCK: "30996200"
+      PORT: "4000"
+    ports:
+      - "4000:4000"
+    restart: always
+
+  correspondent:
+    build:
+      context: ./apps/correspondent
+      dockerfile: Dockerfile
+    depends_on:
+      - indexer
+    environment:
+      RPC_URL: https://testrpc.xlayer.tech
+      CHAIN_ID: "195"
+      TERRITORY_MAP: "0x4987CFAF2CA1650887786C83746CcEC4d4941331"
+      MATCH_ORACLE: "0x57E585543940cCfAB71141d84A419C3F7872d5be"
+      X_BEARER_TOKEN: "6ac1531133fe5b895a2efd8d520cbbab6938949f"
+      PROJECT_HANDLE: "@0xWangyangming"
+      CONFIRMATION_BLOCKS: "5"
+      POLL_INTERVAL_MS: "5000"
+      START_BLOCK: "30996200"
+      DRY_RUN: "true"
+    restart: always
+
+volumes:
+  pgdata:
