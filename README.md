@@ -105,7 +105,15 @@ High-frequency, low-value rallies are the core mechanic — each user may submit
 
 ## Deployed Contracts (X Layer Testnet)
 
-> Addresses will be updated after deployment.
+| Contract | Address |
+|----------|---------|
+| MockUSDT | [`0x243549dBe315Bb930F2D32eBB7F883eEF123D110`](https://www.oklink.com/xlayer-test/address/0x243549dBe315Bb930F2D32eBB7F883eEF123D110) |
+| WarChest | [`0x4941FF4271a4AF1b834b853AA5dEC4254295eb30`](https://www.oklink.com/xlayer-test/address/0x4941FF4271a4AF1b834b853AA5dEC4254295eb30) |
+| FactionRegistry | [`0xfA0ad3bc7D00D1035Ed6333E5bb6e44E8f4F8c78`](https://www.oklink.com/xlayer-test/address/0xfA0ad3bc7D00D1035Ed6333E5bb6e44E8f4F8c78) |
+| TerritoryMap | [`0x265F465eb1828853990DDACA6121C70E67dD025a`](https://www.oklink.com/xlayer-test/address/0x265F465eb1828853990DDACA6121C70E67dD025a) |
+| MatchOracle | [`0x2EBD2f3B32544B9FDE1d95B7F40a103cd69F6Ab9`](https://www.oklink.com/xlayer-test/address/0x2EBD2f3B32544B9FDE1d95B7F40a103cd69F6Ab9) |
+
+All contracts deployed on X Layer Testnet (chainId 195) with 200 regions initialized, 48 factions seeded, and dense simulation data on-chain.
 
 ## Design Decisions
 

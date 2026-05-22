@@ -46,16 +46,21 @@ contract SimulateWar is Script {
 
         uint256 fans = vm.envOr("SIM_FANS", uint256(20));
         uint256 rounds = vm.envOr("ROUNDS", uint256(10));
+        uint256 fanOffset = vm.envOr("FAN_OFFSET", uint256(0));
         uint16 regionCount = map.regionCount();
 
-        for (uint256 i = 0; i < fans; i++) {
+        for (uint256 i = fanOffset; i < fanOffset + fans; i++) {
             // Deterministic burner per fan index.
             uint256 fanPk = uint256(keccak256(abi.encodePacked("tifo.sim.fan", i))) >> 8;
             address fan = vm.addr(fanPk);
 
-            // 1. Operator funds the fan with MockUSDT (open mint on testnet token).
-            vm.broadcast(operatorPk);
+            // 1. Operator funds the fan with MockUSDT + OKB for gas.
+            vm.startBroadcast(operatorPk);
             usdt.mint(fan, 100_000e18);
+            // Send a small amount of native OKB for gas fees
+            (bool sent,) = fan.call{value: 0.005 ether}("");
+            require(sent, "OKB transfer failed");
+            vm.stopBroadcast();
 
             // 2. Fan approves the map and joins a pseudo-random faction.
             uint8 faction = uint8(uint256(keccak256(abi.encodePacked("faction", i))) % 48);
