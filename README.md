@@ -46,6 +46,7 @@ X Layer's zkEVM L2 checks every box. The entire protocol is designed around the 
 | Frontend | Next.js 14 + wagmi + RainbowKit + Tailwind CSS | Map UI, rally interface, faction pages |
 | Map Rendering | D3-geo + TopoJSON (world GeoJSON) | Real-world map with real-time faction coloring |
 | Indexer | TypeScript + viem + PostgreSQL | On-chain event indexing + REST API |
+| War Correspondent | TypeScript + viem + X API v2 | Auto-tweet captures, defections, match events |
 | Wallet | OKX Wallet (first-class via RainbowKit) | Transaction signing and faction enrollment |
 | Pricing Token | MockUSDT (with faucet) | Zero-cost testnet experience |
 | Block Explorer | OKLink | Contract verification and transaction proof |
@@ -122,6 +123,16 @@ tifo/
 │       │   └── api/
 │       │       ├── server.ts         # Express REST server
 │       │       └── routes.ts         # /map/state, /region/:id/history, /leaderboard, /faction/:id, /stats
+│       └── package.json
+├── apps/
+│   └── correspondent/                # War Correspondent — auto-tweet agent
+│       ├── src/
+│       │   ├── index.ts              # Entry point
+│       │   ├── config.ts             # Environment configuration
+│       │   ├── factions.ts           # 48 faction names + flag emojis
+│       │   ├── templates.ts          # Tweet generators (3 variants per event)
+│       │   ├── twitter.ts            # X API v2 OAuth 1.0a client
+│       │   └── correspondent.ts      # viem event polling + dispatch logic
 │       └── package.json
 └── README.md
 ```
@@ -261,6 +272,32 @@ cp .env.example .env
 npm install
 npm run db:init
 npm run dev
+```
+
+---
+
+## War Correspondent (Auto-Tweet Agent)
+
+The correspondent (`apps/correspondent/`) monitors three on-chain events and auto-posts war dispatches to X:
+
+| Event | What gets tweeted |
+|-------|-------------------|
+| `TerritoryCaptured` | `"⚔️ 🇧🇷 Brazil just seized Region #5 from 🇦🇷 Argentina!"` |
+| `Defected` | `"🗡️ BETRAYAL! A former 🇫🇷 France supporter defected to 🇩🇪 Germany"` |
+| `MatchEventPushed` | `"⚽ GOAL! 🇪🇸 Spain — Power surge across 3 regions!"` |
+
+Each tweet includes OKLink transaction proof, `@0xWangyangming @aspect_build #TIFO #XLayer` tags, and 3 randomized template variants for variety.
+
+- **5-block confirmation buffer** to avoid tweeting reorged events
+- **Rate limiter**: max 10 tweets per 15-minute window
+- **Dry-run mode**: `DRY_RUN=true` logs tweets without posting
+
+```bash
+cd apps/correspondent
+cp .env.example .env
+npm install
+npm run dry   # test mode — logs tweets to stdout
+npm start     # live mode — posts to X
 ```
 
 ---
