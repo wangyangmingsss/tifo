@@ -103,6 +103,20 @@ MOCK_USDT=<addr> FACTION_REGISTRY=<addr> TERRITORY_MAP=<addr> MATCH_ORACLE=<addr
   --broadcast -vvv
 ```
 
+## Deployed Contracts (X Layer Testnet)
+
+All contracts deployed and verified on X Layer Testnet (chainId 195). Explorer: [OKLink X Layer Test](https://www.oklink.com/xlayer-test)
+
+| Contract | Address |
+|---|---|
+| MockUSDT | [`0x243549dBe315Bb930F2D32eBB7F883eEF123D110`](https://www.oklink.com/xlayer-test/address/0x243549dBe315Bb930F2D32eBB7F883eEF123D110) |
+| WarChest | [`0x4941FF4271a4AF1b834b853AA5dEC4254295eb30`](https://www.oklink.com/xlayer-test/address/0x4941FF4271a4AF1b834b853AA5dEC4254295eb30) |
+| FactionRegistry | [`0xfA0ad3bc7D00D1035Ed6333E5bb6e44E8f4F8c78`](https://www.oklink.com/xlayer-test/address/0xfA0ad3bc7D00D1035Ed6333E5bb6e44E8f4F8c78) |
+| TerritoryMap | [`0x265F465eb1828853990DDACA6121C70E67dD025a`](https://www.oklink.com/xlayer-test/address/0x265F465eb1828853990DDACA6121C70E67dD025a) |
+| MatchOracle | [`0x2EBD2f3B32544B9FDE1d95B7F40a103cd69F6Ab9`](https://www.oklink.com/xlayer-test/address/0x2EBD2f3B32544B9FDE1d95B7F40a103cd69F6Ab9) |
+
+Deployer: `0xA01fb14B58BDB67A8f07977273f8a2cA04078542` | Regions: 200 | Deployed: 2026-05-22
+
 ## Design Choices (Honest Engineering Notes)
 
 - **Single-operator oracle**: Pragmatic hackathon choice. Production would use Chainlink Functions or UMA for decentralization.
