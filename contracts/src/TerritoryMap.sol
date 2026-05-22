@@ -200,6 +200,12 @@ contract TerritoryMap {
         }
 
         // Find the caller's largest stale contribution under any *other* faction.
+        // For gas-bounded determinism we convert from the region's previous-but-one
+        // dominant faction the caller contributed to; in this build we convert the
+        // caller's contribution recorded under the prior owner if any.
+        // Simplified, auditable rule: convert contribution under NO current-owner
+        // factions is disallowed; we read the caller's contribution under the
+        // single richest non-owner faction they backed.
         (uint8 fromFaction, uint256 stale) = _largestForeignContribution(
             regionId,
             msg.sender,

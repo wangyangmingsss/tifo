@@ -1,183 +1,268 @@
-# TIFO — 48-Faction Zero-Sum On-Chain Territory War · 2026 FIFA World Cup · X Layer
+# TIFO -- 48 Factions, One Map, Zero-Sum Territory War
 
-> Fans don't bet on match outcomes — they wage war on a real-world map, fighting for territory on behalf of their national team. Territory decays, gets betrayed by defectors, and surges with real match events. Every rally, capture, and defection is a verifiable transaction on X Layer.
+**Built for OKX Build X Hackathon | XCup 2026 | X Layer Testnet (chainId 195)**
 
-*Built for OKX Build X Hackathon · XCup 2026 · Submission deadline 2026-05-28 23:59 UTC*
+> Fans don't bet on match outcomes -- they fight for territory on a real-world map. Territory decays, gets flipped by defectors, and surges with real match events. Every rally, capture, and defection is a verifiable X Layer transaction.
+
+---
+
+## The Problem
+
+Billions of fans cheer for their national teams every four years, but that passion has no on-chain expression. Prediction markets reduce football to "who wins?" -- a binary outcome that ignores the living drama of 90 minutes. Existing fan tokens are static holdings with no gameplay. There is no protocol where supporting your nation is an active, contested, strategic act.
+
+## The Solution
+
+TIFO is a shared, contested world map where 48 World Cup factions wage continuous territory war. Each of the 200 map regions is owned by whichever faction has the most power in it. Power comes from fans committing tokens (rallying), but three novel mechanics ensure the game never stagnates:
+
+1. **Decay** -- Territory power bleeds 1% per hour. Stop playing and you lose your land. This forces continuous on-chain engagement; idle whales cannot hold territory.
+2. **Underdog Bonus** -- The further behind your faction is in a region, the more each rally counts (up to +50%). No region is ever permanently locked. Comebacks are always possible.
+3. **Defection** -- If a region you rallied for gets captured by another faction, you can defect: convert your stale contribution into power for the new owner, keeping a 20% finder's reward. This injects social betrayal dynamics and accelerates contested regions flipping.
+
+Every goal, red card, and final whistle from the real World Cup is pushed on-chain through the MatchOracle, triggering faction-wide power surges that reshape the entire map in seconds.
 
 ---
 
 ## Why X Layer
 
-High-frequency, low-value rallies are the core mechanic — each user may submit dozens per session. On a high-gas L1 this would be economically impossible. X Layer's zkEVM L2 (chainId 195) provides sub-cent transaction costs that make TIFO's continuous territory war viable, turning the technical choice into a product requirement.
+<!-- SECTION: why-xlayer -->
+TIFO's core action -- `rally()` -- is a high-frequency, low-amount transaction. A fan might rally 5-10 times in a single match, spending fractions of a dollar each time. This usage pattern demands:
 
-## Repository Structure
+- **Cheap gas**: Sub-cent transaction costs so micro-rallies are economically viable
+- **Fast finality**: Map updates must feel instant for the real-time territory visualization
+- **EVM compatibility**: Foundry toolchain, wagmi/viem frontend stack, OKLink verification -- all work out of the box
+- **zkEVM security**: Ethereum-grade security inherited through zero-knowledge proofs
+
+X Layer's zkEVM L2 checks every box. The entire protocol is designed around the assumption that gas is cheap enough for fans to rally as often as they cheer.
+
+---
+
+## Tech Stack
+
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| Network | X Layer Testnet (zkEVM L2, chainId 195) | Low-gas high-frequency settlement |
+| Smart Contracts | Solidity 0.8.24 + Foundry | Territory war core logic |
+| Frontend | Next.js 14 + wagmi + RainbowKit + Tailwind CSS | Map UI, rally interface, faction pages |
+| Map Rendering | D3-geo + TopoJSON (world GeoJSON) | Real-world map with real-time faction coloring |
+| Wallet | OKX Wallet (first-class via RainbowKit) | Transaction signing and faction enrollment |
+| Pricing Token | MockUSDT (with faucet) | Zero-cost testnet experience |
+| Block Explorer | OKLink | Contract verification and transaction proof |
+
+---
+
+## Monorepo Structure
 
 ```
 tifo/
-├── contracts/                  # Foundry project (Solidity 0.8.24)
-│   ├── src/
-│   │   ├── FactionRegistry.sol     # Faction enrollment + switching economy
-│   │   ├── TerritoryMap.sol        # Territory core (the soul of TIFO)
-│   │   ├── WarChest.sol            # Prize pool & season settlement
-│   │   ├── MatchOracle.sol         # Match event → map boost bridge
-│   │   ├── MockUSDT.sol            # Testnet token with faucet
-│   │   └── libraries/
-│   │       ├── TifoTypes.sol       # Constants + custom errors
-│   │       └── PowerMath.sol       # Decay + underdog bonus pure functions
-│   ├── test/Tifo.t.sol             # 66 test cases, 99%+ source coverage
-│   ├── script/
-│   │   ├── Deploy.s.sol            # Full deployment + wiring
-│   │   ├── SeedMap.s.sol           # Genesis anchor seeding (48 factions)
-│   │   └── SimulateWar.s.sol       # Dense simulation for grading window
-│   └── deployments/xlayer-testnet.json
-├── apps/
-│   ├── web/                        # Next.js frontend
-│   ├── indexer/                    # Event indexer + verifiability API
-│   └── correspondent/              # Mulerun agent war reporter
-├── packages/
-│   ├── config/                     # 48 faction config
-│   └── abi/                        # Contract ABI exports
-└── docs/                           # PITCH.md, ARCHITECTURE.md
++-- contracts/                    # Foundry project
+|   +-- src/
+|   |   +-- TerritoryMap.sol          # Territory core (the soul of TIFO)
+|   |   +-- FactionRegistry.sol       # Faction enrollment + switch fees
+|   |   +-- WarChest.sol              # Prize pool and settlement
+|   |   +-- MatchOracle.sol           # Real match events -> on-chain surges
+|   |   +-- MockUSDT.sol              # Testnet token with faucet
+|   |   +-- libraries/
+|   |       +-- TifoTypes.sol         # Constants + custom errors
+|   |       +-- PowerMath.sol         # Decay + underdog bonus pure functions
+|   +-- script/
+|   |   +-- Deploy.s.sol              # Full deployment + wiring
+|   |   +-- SeedMap.s.sol             # Genesis: anchor each faction to home region
+|   |   +-- SimulateWar.s.sol         # Dense on-chain activity for demo
+|   +-- test/                         # Foundry unit tests
+|   +-- deployments/
+|       +-- xlayer-testnet.json       # Deployed contract addresses
++-- src/                          # Next.js frontend
+|   +-- app/
+|   |   +-- page.tsx                  # Landing page with live stats
+|   |   +-- map/page.tsx              # Interactive territory map
+|   +-- components/
+|   |   +-- WorldMap.tsx              # D3-geo map with faction coloring
+|   |   +-- RegionSidebar.tsx         # Region detail + rally action
+|   |   +-- MapLegend.tsx             # Faction legend with territory counts
+|   |   +-- Navbar.tsx                # Navigation + wallet connect
+|   +-- config/
+|       +-- factions.ts               # 48 faction definitions (colors, anchors)
+|       +-- contracts.ts              # Contract addresses + chain config
+|       +-- wagmi.ts                  # Wagmi/RainbowKit provider config
++-- docs/
+|   +-- PITCH.md                      # One-page pitch for judges
+|   +-- ARCHITECTURE.md              # System architecture overview
++-- public/                       # Static assets (world TopoJSON, icons)
++-- README.md                     # This file
 ```
+
+---
 
 ## Smart Contracts
 
-5 contracts + 2 libraries, all Solidity 0.8.24, **zero external dependencies** (no OpenZeppelin).
+Five contracts and two libraries form the on-chain protocol:
+
+### Libraries
 
 | Contract | Purpose |
-|---|---|
-| **TifoTypes** | Shared constants (`FACTION_COUNT=48`, `NO_FACTION=255`, `BPS=10000`) and 11 custom errors |
-| **PowerMath** | Pure functions: hourly decay (capped at 168 iterations) and underdog bonus calculation |
-| **FactionRegistry** | User faction enrollment; first join free, switching costs fee (recycled to WarChest) |
-| **TerritoryMap** | Core engine: `rally()` (commit tokens → push faction power → capture), `defect()` (betray old faction → convert stale contribution), decay + underdog bonus make territory dynamic |
-| **WarChest** | Prize pool: passive accrual for territory holders, season settlement, pull-based claims with `bumpContribTotal` wiring |
-| **MatchOracle** | Single-operator oracle pushing match events (GOAL/PENALTY/RED_CARD/WHISTLE) → map power surges |
-| **MockUSDT** | Self-contained ERC-20 with faucet (1000 mUSDT per 12h cooldown) for zero-cost testnet experience |
+|----------|---------|
+| `TifoTypes.sol` | Constants (`FACTION_COUNT = 48`, `NO_FACTION = 255`, `BPS = 10_000`) and gas-efficient custom errors |
+| `PowerMath.sol` | Pure functions for decay calculation (hourly retention with 168-hour cap) and underdog bonus scaling |
 
-## Three Core Mechanics (Innovation)
+### Core Contracts
 
-1. **Decay** — Territory power bleeds hourly (`retentionBps = 9900`, 1% per hour). Stop rallying → lose territory. Forces continuous on-chain activity. Iteration capped at 168 hours to bound gas.
-2. **Underdog Bonus** — The further behind a faction is, the more each rally unit counts (up to `maxUnderdogBps = 5000`, +50%). No region is ever locked; comebacks are always possible.
-3. **Defection** — Betray your old faction: convert stale contributions into power for the new owner (80% conversion + 20% finder's reward). Creates loyalty-vs-profit social tension unique in hackathon SocialFi.
+| Contract | Purpose | Key Functions |
+|----------|---------|---------------|
+| `FactionRegistry.sol` | Maps wallets to factions. First join is free; switching costs a fee routed to WarChest | `joinFaction()`, `factionOf()`, `isEnrolled()` |
+| `TerritoryMap.sol` | The heart of TIFO. 200 regions contested by 48 factions with decay, underdog bonus, and defection | `rally()`, `defect()`, `getMapState()`, `effectivePower()` |
+| `WarChest.sol` | Collects the 2% protocol fee from every rally. Distributes prizes to winning factions at season settlement | `claim()`, `bumpContribTotal()` |
+| `MatchOracle.sol` | Operator-controlled bridge from real match events to on-chain power surges | `pushMatchEvent()` (WHISTLE, GOAL, RED_CARD, FINAL) |
+| `MockUSDT.sol` | ERC-20 with open `mint()` for testnet. Zero barrier to entry | `mint()`, `approve()` |
 
-## Quick Start
+### Contract Wiring
+
+Deployment wires the contracts into a closed loop:
+
+```
+WarChest.setMap(TerritoryMap)         -- chest reads territory state
+WarChest.setUpdater(TerritoryMap)     -- rally() bumps claim denominator
+TerritoryMap.transferOwnership(MatchOracle)  -- oracle can apply match boosts
+```
+
+After wiring, the deployer retains no admin privileges over the map -- only the MatchOracle can trigger surges.
+
+---
+
+## Core Mechanics
+
+### 1. Decay
+
+Every region's faction power decays by `retentionBps` (default 99%) per hour. After one day of inactivity, a region retains only ~78% of its power. After a week, virtually nothing remains. This creates a use-it-or-lose-it dynamic: territory must be actively defended.
+
+```
+effectivePower = storedPower * (retentionBps / 10000) ^ hoursSinceLastUpdate
+```
+
+The decay loop is capped at 168 iterations (one week) to bound gas costs.
+
+### 2. Underdog Bonus
+
+When a faction rallies a region where it is behind, each token committed is amplified:
+
+```
+bonus = min(maxUnderdogBps, (ownerPower - attackerPower) * maxUnderdogBps / ownerPower)
+effectiveAmount = rawAmount * (10000 + bonus) / 10000
+```
+
+With `maxUnderdogBps = 5000`, a faction with zero power in a region gets +50% on every rally. This guarantees that no region is ever mathematically locked -- coordinated underdogs can always mount a comeback.
+
+### 3. Defection
+
+The social-game core. When a region flips from Faction A to Faction B, former Faction A contributors in that region face a choice: keep their stale contribution (which now earns them nothing) or defect to Faction B:
+
+- **80%** of the stale contribution converts to fresh power for Faction B
+- **20%** goes to the defector as a finder's reward (contribution credit under Faction B)
+
+Defection is bounded: the contract iterates over 48 factions to find the caller's largest foreign contribution -- a constant-gas operation.
+
+---
+
+## OKX Ecosystem Integration
+
+TIFO is built to be a native X Layer application, deeply integrated with the OKX ecosystem:
+
+| Integration | How |
+|------------|-----|
+| **OKX Wallet** | First-class wallet connector via RainbowKit. Users connect, sign rallies, and manage factions directly from OKX Wallet |
+| **X Layer Testnet** | All contracts deployed on chainId 195. The high-frequency rally pattern leverages X Layer's low gas costs |
+| **OKLink Verification** | All contract source code verified on OKLink. The verifiability panel in the frontend links every territory event directly to its OKLink transaction page |
+| **zkEVM Compatibility** | Contracts compiled with `evm_version = "paris"` (avoids PUSH0/Shanghai) for full X Layer zkEVM compatibility |
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js >= 18
+- [Foundry](https://book.getfoundry.sh/getting-started/installation) (for smart contracts)
+
+### Frontend
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) to see the territory map.
+
+### Smart Contracts
 
 ```bash
 cd contracts
-forge install foundry-rs/forge-std  # if not already installed
-forge build                          # compile (evm_version = paris for X Layer zkEVM)
-forge test -vvv                      # run 66 tests (all green)
-forge coverage                       # source coverage ≥99%
-```
 
-### Test Coverage
+# Install Foundry dependencies
+forge install
 
-66 test cases covering all 5 contracts + 2 libraries. Scripts excluded from coverage (deployment-only).
+# Build contracts
+forge build
 
-| File | Lines | Statements | Branches | Functions |
-|---|---|---|---|---|
-| FactionRegistry.sol | 95.83% | 95.65% | 80.00% | 100% |
-| MatchOracle.sol | 100% | 96.43% | 75.00% | 100% |
-| MockUSDT.sol | 100% | 100% | 100% | 100% |
-| TerritoryMap.sol | 99.06% | 99.24% | 94.74% | 100% |
-| WarChest.sol | 100% | 97.53% | 86.67% | 100% |
-| PowerMath.sol | 100% | 100% | 100% | 100% |
-| **Total** | **99.17%** | **98.44%** | **90.38%** | **100%** |
+# Run tests
+forge test -vvv
 
-## Deployed Contracts (X Layer Testnet)
-
-All contracts deployed, wired, seeded, and **source-verified** on X Layer Testnet (chainId 195).
-
-Explorer: [OKLink X Layer Testnet](https://www.oklink.com/xlayer-test)
-
-| Contract | Address | Verified |
-|---|---|---|
-| MockUSDT | [`0x212E0207999B982b2F4B8f91cA421D94dc8438e3`](https://www.oklink.com/xlayer-test/address/0x212E0207999B982b2F4B8f91cA421D94dc8438e3) | Yes |
-| WarChest | [`0x2E587e2E830D637B80e3a23db7001a92582f1352`](https://www.oklink.com/xlayer-test/address/0x2E587e2E830D637B80e3a23db7001a92582f1352) | Yes |
-| FactionRegistry | [`0x80449696e9F2DBEBC7F154805320f49ae5aA6E23`](https://www.oklink.com/xlayer-test/address/0x80449696e9F2DBEBC7F154805320f49ae5aA6E23) | Yes |
-| TerritoryMap | [`0x4987CFAF2CA1650887786C83746CcEC4d4941331`](https://www.oklink.com/xlayer-test/address/0x4987CFAF2CA1650887786C83746CcEC4d4941331) | Yes |
-| MatchOracle | [`0x57E585543940cCfAB71141d84A419C3F7872d5be`](https://www.oklink.com/xlayer-test/address/0x57E585543940cCfAB71141d84A419C3F7872d5be) | Yes |
-
-**Deployer:** `0xA01fb14B58BDB67A8f07977273f8a2cA04078542`
-
-### Deployment Wiring
-
-All integration points are closed in a single `Deploy.s.sol` transaction:
-
-```
-WarChest.map        → TerritoryMap  (chest reads territory state)
-WarChest.updater    → TerritoryMap  (rally() auto-bumps claim denominator)
-TerritoryMap.owner  → MatchOracle   (oracle can applyMatchBoost)
-```
-
-### Live On-Chain Data
-
-| Metric | Value |
-|---|---|
-| Regions registered | 200 |
-| Factions seeded | 48 (each with 1000e18 starting power) |
-| Factions holding territory | 40 / 48 |
-| Regions currently owned | 48 / 200 |
-| Oracle events pushed | 55 (seeds + goal surges) |
-| Simulated fans | 30 burner wallets |
-| Rally rounds per fan | 5 |
-| Goal surge events | 6 |
-| Total on-chain transactions | 300+ (rallies, joins, captures, surges) |
-
-**Top factions by territory:** NZL (4 regions), IRQ (3), ENG (2), CRO (2), JPN (2)
-
-### Protocol Parameters
-
-| Parameter | Value | Description |
-|---|---|---|
-| `retentionBps` | 9,900 | 1% power decay per hour |
-| `maxUnderdogBps` | 5,000 | Up to +50% bonus for underdogs |
-| `protocolBps` | 200 | 2% of each rally → WarChest |
-| `switchFee` | 100 mUSDT | Cost to change factions |
-| `passiveRatePerSecond` | 1e12 | Passive accrual for territory holders |
-| `FAUCET_AMOUNT` | 1,000 mUSDT | Per faucet call |
-| `FAUCET_COOLDOWN` | 12 hours | Between faucet calls |
-
-## Deployment Commands
-
-```bash
-export OPERATOR_PRIVATE_KEY=<your-key>
-
-# 1. Deploy all contracts + wire integrations
+# Deploy to X Layer Testnet
 forge script script/Deploy.s.sol:Deploy \
   --rpc-url https://testrpc.xlayer.tech \
   --private-key $OPERATOR_PRIVATE_KEY \
   --broadcast -vvv
+```
 
-# 2. Seed 48 faction anchor regions
-MATCH_ORACLE=<oracle-addr> \
-  forge script script/SeedMap.s.sol:SeedMap \
-  --rpc-url https://testrpc.xlayer.tech \
-  --private-key $OPERATOR_PRIVATE_KEY \
-  --broadcast -vvv
+### Simulate Activity (Demo)
 
-# 3. Simulate dense on-chain activity (run multiple batches)
-MOCK_USDT=<addr> FACTION_REGISTRY=<addr> TERRITORY_MAP=<addr> MATCH_ORACLE=<addr> \
-  SIM_FANS=10 ROUNDS=5 SIM_OFFSET=0 \
-  forge script script/SimulateWar.s.sol:SimulateWar \
+After deployment, run the war simulation to generate dense on-chain activity:
+
+```bash
+# Set environment variables with deployed addresses
+export MOCK_USDT=<address>
+export FACTION_REGISTRY=<address>
+export TERRITORY_MAP=<address>
+export MATCH_ORACLE=<address>
+
+# Run simulation (20 fans, 10 rounds each = 200+ transactions)
+forge script script/SimulateWar.s.sol:SimulateWar \
   --rpc-url https://testrpc.xlayer.tech \
   --private-key $OPERATOR_PRIVATE_KEY \
   --broadcast -vvv
 ```
 
-## Design Choices (Honest Engineering Notes)
+---
 
-- **Single-operator oracle**: Pragmatic hackathon choice. Production would use Chainlink Functions or UMA for decentralization. Honestly labeled in code and docs.
-- **`evm_version = "paris"`**: X Layer zkEVM historically doesn't support PUSH0 (Shanghai default in Solidity 0.8.20+). Paris avoids this — the most common deployment failure on zkEVM.
-- **No OpenZeppelin**: MockUSDT is self-contained, all contracts use low-level `call` for ERC-20 transfers to handle non-standard tokens. Zero external dependencies = `forge build` with no extra remapping.
-- **Bounded loops**: `_largestForeignContribution` iterates over 48 factions (bounded). `getMapState`/`territoryCounts` iterate over ~200 regions (view-only, no on-chain gas cost).
-- **`bumpContribTotal` wiring**: TerritoryMap's `rally()` auto-mirrors contribution totals into WarChest via `try/catch` callback, making the dependency non-fatal. Deploy script sets `updater` to close this integration.
-- **SimulateWar with `SIM_OFFSET`**: Allows incremental batches of simulation without colliding with previously registered fans.
+## Contract Addresses (X Layer Testnet)
+
+| Contract | Address |
+|----------|---------|
+| MockUSDT | `TBD` |
+| FactionRegistry | `TBD` |
+| TerritoryMap | `TBD` |
+| WarChest | `TBD` |
+| MatchOracle | `TBD` |
+
+> Addresses will be populated in `contracts/deployments/xlayer-testnet.json` after deployment.
+
+---
+
+## How It Works -- 30-Second Demo
+
+1. **Connect** OKX Wallet on X Layer Testnet
+2. **Pick a faction** -- choose your nation (first join is free)
+3. **Mint** testnet MockUSDT from the faucet
+4. **Rally** -- tap a region on the map, commit tokens, and push your faction's power
+5. **Watch** the map shift in real time as your faction gains (or loses) ground
+6. **Defect** -- if your region gets captured, betray your old faction for a finder's reward
+7. **Verify** -- click any event to see the on-chain transaction on OKLink
+
+Every color change on the map is a verifiable X Layer transaction.
+
+---
 
 ## License
 
 MIT
-
----
-
-*Built for OKX Build X Hackathon · XCup 2026*
