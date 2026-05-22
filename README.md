@@ -1,22 +1,24 @@
-# TIFO -- 48 Factions, One Map, Zero-Sum Territory War
+# TIFO — 48-Faction Zero-Sum On-Chain Territory War · 2026 FIFA World Cup · X Layer
 
 **Built for OKX Build X Hackathon | XCup 2026 | X Layer Testnet (chainId 195)**
 
-> Fans don't bet on match outcomes -- they fight for territory on a real-world map. Territory decays, gets flipped by defectors, and surges with real match events. Every rally, capture, and defection is a verifiable X Layer transaction.
+> Fans don't bet on match outcomes — they wage war on a real-world map, fighting for territory on behalf of their national team. Territory decays, gets betrayed by defectors, and surges with real match events. Every rally, capture, and defection is a verifiable transaction on X Layer.
+
+*Submission deadline 2026-05-28 23:59 UTC*
 
 ---
 
 ## The Problem
 
-Billions of fans cheer for their national teams every four years, but that passion has no on-chain expression. Prediction markets reduce football to "who wins?" -- a binary outcome that ignores the living drama of 90 minutes. Existing fan tokens are static holdings with no gameplay. There is no protocol where supporting your nation is an active, contested, strategic act.
+Billions of fans cheer for their national teams every four years, but that passion has no on-chain expression. Prediction markets reduce football to "who wins?" — a binary outcome that ignores the living drama of 90 minutes. Existing fan tokens are static holdings with no gameplay. There is no protocol where supporting your nation is an active, contested, strategic act.
 
 ## The Solution
 
 TIFO is a shared, contested world map where 48 World Cup factions wage continuous territory war. Each of the 200 map regions is owned by whichever faction has the most power in it. Power comes from fans committing tokens (rallying), but three novel mechanics ensure the game never stagnates:
 
-1. **Decay** -- Territory power bleeds 1% per hour. Stop playing and you lose your land. This forces continuous on-chain engagement; idle whales cannot hold territory.
-2. **Underdog Bonus** -- The further behind your faction is in a region, the more each rally counts (up to +50%). No region is ever permanently locked. Comebacks are always possible.
-3. **Defection** -- If a region you rallied for gets captured by another faction, you can defect: convert your stale contribution into power for the new owner, keeping a 20% finder's reward. This injects social betrayal dynamics and accelerates contested regions flipping.
+1. **Decay** — Territory power bleeds 1% per hour. Stop playing and you lose your land. This forces continuous on-chain engagement; idle whales cannot hold territory.
+2. **Underdog Bonus** — The further behind your faction is in a region, the more each rally counts (up to +50%). No region is ever permanently locked. Comebacks are always possible.
+3. **Defection** — Betray your old faction: convert stale contributions into power for the new owner (80% conversion + 20% finder's reward). Creates loyalty-vs-profit social tension unique in hackathon SocialFi.
 
 Every goal, red card, and final whistle from the real World Cup is pushed on-chain through the MatchOracle, triggering faction-wide power surges that reshape the entire map in seconds.
 
@@ -24,12 +26,11 @@ Every goal, red card, and final whistle from the real World Cup is pushed on-cha
 
 ## Why X Layer
 
-<!-- SECTION: why-xlayer -->
-TIFO's core action -- `rally()` -- is a high-frequency, low-amount transaction. A fan might rally 5-10 times in a single match, spending fractions of a dollar each time. This usage pattern demands:
+TIFO's core action — `rally()` — is a high-frequency, low-amount transaction. A fan might rally 5-10 times in a single match, spending fractions of a dollar each time. This usage pattern demands:
 
 - **Cheap gas**: Sub-cent transaction costs so micro-rallies are economically viable
 - **Fast finality**: Map updates must feel instant for the real-time territory visualization
-- **EVM compatibility**: Foundry toolchain, wagmi/viem frontend stack, OKLink verification -- all work out of the box
+- **EVM compatibility**: Foundry toolchain, wagmi/viem frontend stack, OKLink verification — all work out of the box
 - **zkEVM security**: Ethereum-grade security inherited through zero-knowledge proofs
 
 X Layer's zkEVM L2 checks every box. The entire protocol is designed around the assumption that gas is cheap enough for fans to rally as often as they cheer.
@@ -50,45 +51,53 @@ X Layer's zkEVM L2 checks every box. The entire protocol is designed around the 
 
 ---
 
-## Monorepo Structure
+## Repository Structure
 
 ```
 tifo/
-+-- contracts/                    # Foundry project
-|   +-- src/
-|   |   +-- TerritoryMap.sol          # Territory core (the soul of TIFO)
-|   |   +-- FactionRegistry.sol       # Faction enrollment + switch fees
-|   |   +-- WarChest.sol              # Prize pool and settlement
-|   |   +-- MatchOracle.sol           # Real match events -> on-chain surges
-|   |   +-- MockUSDT.sol              # Testnet token with faucet
-|   |   +-- libraries/
-|   |       +-- TifoTypes.sol         # Constants + custom errors
-|   |       +-- PowerMath.sol         # Decay + underdog bonus pure functions
-|   +-- script/
-|   |   +-- Deploy.s.sol              # Full deployment + wiring
-|   |   +-- SeedMap.s.sol             # Genesis: anchor each faction to home region
-|   |   +-- SimulateWar.s.sol         # Dense on-chain activity for demo
-|   +-- test/                         # Foundry unit tests
-|   +-- deployments/
-|       +-- xlayer-testnet.json       # Deployed contract addresses
-+-- src/                          # Next.js frontend
-|   +-- app/
-|   |   +-- page.tsx                  # Landing page with live stats
-|   |   +-- map/page.tsx              # Interactive territory map
-|   +-- components/
-|   |   +-- WorldMap.tsx              # D3-geo map with faction coloring
-|   |   +-- RegionSidebar.tsx         # Region detail + rally action
-|   |   +-- MapLegend.tsx             # Faction legend with territory counts
-|   |   +-- Navbar.tsx                # Navigation + wallet connect
-|   +-- config/
-|       +-- factions.ts               # 48 faction definitions (colors, anchors)
-|       +-- contracts.ts              # Contract addresses + chain config
-|       +-- wagmi.ts                  # Wagmi/RainbowKit provider config
-+-- docs/
-|   +-- PITCH.md                      # One-page pitch for judges
-|   +-- ARCHITECTURE.md              # System architecture overview
-+-- public/                       # Static assets (world TopoJSON, icons)
-+-- README.md                     # This file
+├── contracts/                    # Foundry project (Solidity 0.8.24)
+│   ├── src/
+│   │   ├── TerritoryMap.sol          # Territory core (the soul of TIFO)
+│   │   ├── FactionRegistry.sol       # Faction enrollment + switching economy
+│   │   ├── WarChest.sol              # Prize pool & season settlement
+│   │   ├── MatchOracle.sol           # Match event → map boost bridge
+│   │   ├── MockUSDT.sol              # Testnet token with faucet
+│   │   └── libraries/
+│   │       ├── TifoTypes.sol         # Constants + custom errors
+│   │       └── PowerMath.sol         # Decay + underdog bonus pure functions
+│   ├── test/Tifo.t.sol               # 66 test cases, 99%+ source coverage
+│   ├── script/
+│   │   ├── Deploy.s.sol              # Full deployment + wiring
+│   │   ├── SeedMap.s.sol             # Genesis anchor seeding (48 factions)
+│   │   └── SimulateWar.s.sol         # Dense simulation for grading window
+│   └── deployments/xlayer-testnet.json
+├── src/                          # Next.js 14 App Router frontend
+│   ├── app/
+│   │   ├── page.tsx                  # Landing page: hero + live stats + CTA
+│   │   └── map/page.tsx              # Interactive real-time world map
+│   ├── components/
+│   │   ├── WorldMap.tsx              # D3-geo + TopoJSON map with faction coloring
+│   │   ├── WorldMapPreview.tsx       # Mini map preview for homepage hero
+│   │   ├── RegionSidebar.tsx         # Region detail panel + rally button + capture history
+│   │   ├── MapLegend.tsx             # Faction territory leaderboard overlay
+│   │   ├── StatsCounter.tsx          # Animated counter with IntersectionObserver
+│   │   └── Navbar.tsx                # Navigation + RainbowKit wallet connect
+│   ├── config/
+│   │   ├── factions.ts               # 48 faction definitions (colors, names, anchors)
+│   │   ├── contracts.ts              # Contract addresses + chain config + OKLink helpers
+│   │   ├── regionMapping.ts          # ISO 3166-1 → region ID mapping (177 countries)
+│   │   ├── wagmi.ts                  # Wagmi/RainbowKit provider config
+│   │   └── abi/                      # Contract ABIs (TerritoryMap, FactionRegistry, MockUSDT)
+│   └── providers/
+│       └── Web3Provider.tsx          # WagmiProvider + QueryClient + RainbowKit
+├── public/
+│   └── data/
+│       ├── countries-110m.json       # World TopoJSON (overview, 177 countries)
+│       └── countries-50m.json        # World TopoJSON (detail, 241 countries)
+├── docs/
+│   ├── PITCH.md                      # One-page pitch for judges
+│   └── ARCHITECTURE.md              # System architecture overview
+└── README.md
 ```
 
 ---
@@ -237,15 +246,28 @@ forge script script/SimulateWar.s.sol:SimulateWar \
 
 ## Contract Addresses (X Layer Testnet)
 
-| Contract | Address |
-|----------|---------|
-| MockUSDT | `TBD` |
-| FactionRegistry | `TBD` |
-| TerritoryMap | `TBD` |
-| WarChest | `TBD` |
-| MatchOracle | `TBD` |
+All contracts are deployed and **source-verified** on OKLink.
 
-> Addresses will be populated in `contracts/deployments/xlayer-testnet.json` after deployment.
+| Contract | Address | Verified |
+|----------|---------|----------|
+| MockUSDT | [`0x212E0207999B982b2F4B8f91cA421D94dc8438e3`](https://www.oklink.com/xlayer-test/address/0x212E0207999B982b2F4B8f91cA421D94dc8438e3) | Yes |
+| WarChest | [`0x2E587e2E830D637B80e3a23db7001a92582f1352`](https://www.oklink.com/xlayer-test/address/0x2E587e2E830D637B80e3a23db7001a92582f1352) | Yes |
+| FactionRegistry | [`0x80449696e9F2DBEBC7F154805320f49ae5aA6E23`](https://www.oklink.com/xlayer-test/address/0x80449696e9F2DBEBC7F154805320f49ae5aA6E23) | Yes |
+| TerritoryMap | [`0x4987CFAF2CA1650887786C83746CcEC4d4941331`](https://www.oklink.com/xlayer-test/address/0x4987CFAF2CA1650887786C83746CcEC4d4941331) | Yes |
+| MatchOracle | [`0x57E585543940cCfAB71141d84A419C3F7872d5be`](https://www.oklink.com/xlayer-test/address/0x57E585543940cCfAB71141d84A419C3F7872d5be) | Yes |
+
+**Deployer:** `0xA01fb14B58BDB67A8f07977273f8a2cA04078542`
+
+### Live On-Chain Data
+
+| Metric | Value |
+|--------|-------|
+| Regions | 200 |
+| Factions seeded | 48 |
+| Rally rounds per fan | 5 |
+| Total on-chain transactions | 300+ (rallies, joins, captures, surges) |
+
+> Every number in the frontend is verifiable on X Layer. Click any event to jump to its OKLink transaction page.
 
 ---
 
