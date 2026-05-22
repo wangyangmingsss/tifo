@@ -83,6 +83,25 @@ export default async function Image({ params }: { params: { id: string } }) {
   const factionId = parseInt(params.id, 10);
   const faction = FACTIONS.find((f) => f.id === factionId);
 
+  /* Fetch live stats from the Indexer API */
+  let territoriesHeld = '--';
+  let memberCount = '--';
+  let prizePoolFormatted = '--';
+  try {
+    const indexerApi = process.env.NEXT_PUBLIC_INDEXER_API;
+    if (indexerApi) {
+      const res = await fetch(`${indexerApi}/faction/${factionId}`, { next: { revalidate: 60 } });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.territoriesHeld != null) territoriesHeld = String(data.territoriesHeld);
+        if (data.memberCount != null) memberCount = String(data.memberCount);
+        if (data.prizePoolFormatted != null) prizePoolFormatted = String(data.prizePoolFormatted);
+      }
+    }
+  } catch {
+    // fall back to '--'
+  }
+
   if (!faction) {
     // Fallback for unknown faction IDs
     return new ImageResponse(
@@ -225,7 +244,7 @@ export default async function Image({ params }: { params: { id: string } }) {
                 border: '1px solid rgba(255,255,255,0.1)',
               }}
             >
-              <span style={{ color: faction.color, fontWeight: 700, fontSize: 28 }}>--</span>
+              <span style={{ color: faction.color, fontWeight: 700, fontSize: 28 }}>{territoriesHeld}</span>
               <span>Territories</span>
             </div>
             <div
@@ -239,7 +258,7 @@ export default async function Image({ params }: { params: { id: string } }) {
                 border: '1px solid rgba(255,255,255,0.1)',
               }}
             >
-              <span style={{ color: faction.color, fontWeight: 700, fontSize: 28 }}>--</span>
+              <span style={{ color: faction.color, fontWeight: 700, fontSize: 28 }}>{memberCount}</span>
               <span>Members</span>
             </div>
             <div
@@ -253,7 +272,7 @@ export default async function Image({ params }: { params: { id: string } }) {
                 border: '1px solid rgba(255,255,255,0.1)',
               }}
             >
-              <span style={{ color: faction.color, fontWeight: 700, fontSize: 28 }}>--</span>
+              <span style={{ color: faction.color, fontWeight: 700, fontSize: 28 }}>{prizePoolFormatted}</span>
               <span>mUSDT Prize Pool</span>
             </div>
           </div>

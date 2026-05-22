@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, formatEther } from 'viem';
 import Navbar from '@/components/Navbar';
+import GasCostBadge from '@/components/GasCostBadge';
+import { useOkbPrice } from '@/hooks/useOkbPrice';
 import { CONTRACTS, oklinkTx } from '@/config/contracts';
 import { TerritoryMapABI } from '@/config/abi/TerritoryMap';
 import { FactionRegistryABI } from '@/config/abi/FactionRegistry';
@@ -65,6 +67,9 @@ export default function RallyPage({ params }: { params: { regionId: string } }) 
   const valid = isValidRegion(regionId);
   const countryIso = regionIdToCountry[regionId];
   const regionName = countryIso ? getCountryName(countryIso) : `Region ${regionId}`;
+
+  // -- OKB price for gas estimate --
+  const { price: okbPrice } = useOkbPrice();
 
   // -- local state --
   const [amount, setAmount] = useState(0);
@@ -487,6 +492,11 @@ export default function RallyPage({ params }: { params: { regionId: string } }) 
             >
               {btnLabel}
             </button>
+
+            {/* Gas cost estimate */}
+            <div className="flex justify-center">
+              <GasCostBadge okbPrice={okbPrice} />
+            </div>
 
             {/* Error message */}
             {phase === 'error' && errorMsg && (

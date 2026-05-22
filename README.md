@@ -74,29 +74,50 @@ tifo/
 │   ├── test/Tifo.t.sol               # 66 test cases, 99%+ source coverage
 │   ├── script/
 │   │   ├── Deploy.s.sol              # Full deployment + wiring
+│   │   ├── SeedMap.s.sol             # Genesis anchor seeding (48 factions, real ISO mapping)
+│   │   └── SimulateWar.s.sol         # Dense simulation for grading window
+│   └── deployments/xlayer-testnet.json
+├── packages/                     # Shared packages (single source of truth)
+│   ├── config/
+│   │   ├── factions.config.js        # 48 faction definitions (id, code, name, color, anchor, anchorISO)
+│   │   └── package.json              # @tifo/config
+│   └── abi/
+│       ├── TerritoryMap.json         # Superset ABI (functions + events)
+│       ├── FactionRegistry.json
+│       ├── WarChest.json
+│       ├── MatchOracle.json
+│       ├── MockUSDT.json
+│       ├── index.js                  # CommonJS re-export of all ABIs
+│       └── package.json              # @tifo/abi
+├── src/                          # Next.js 14 App Router frontend
+│   │   ├── Deploy.s.sol              # Full deployment + wiring
 │   │   ├── SeedMap.s.sol             # Genesis anchor seeding (48 factions)
 │   │   └── SimulateWar.s.sol         # Dense simulation for grading window
 │   └── deployments/xlayer-testnet.json
 ├── src/                          # Next.js 14 App Router frontend
 │   ├── app/
-│   │   ├── page.tsx                  # Landing page: hero + live stats + CTA
-│   │   ├── map/page.tsx              # Interactive real-time world map
-│   │   ├── rally/[regionId]/page.tsx # Rally panel: slider + underdog preview + wagmi tx
+│   │   ├── page.tsx                  # Landing page: hero + live stats (Indexer API) + CTA
+│   │   ├── map/page.tsx              # Interactive real-time world map (on-chain getMapState)
+│   │   ├── rally/[regionId]/page.tsx # Rally panel: slider + underdog preview + gas cost badge
 │   │   ├── faction/[id]/
-│   │   │   ├── page.tsx              # Faction details: territories, prize pool, members
+│   │   │   ├── page.tsx              # Faction details: territories, prize pool, real contributors
 │   │   │   ├── layout.tsx            # Dynamic metadata + OG tags
-│   │   │   └── opengraph-image.tsx   # Dynamic 1200×630 OG image per faction
+│   │   │   └── opengraph-image.tsx   # Dynamic 1200×630 OG image (live stats from Indexer)
 │   │   ├── me/
-│   │   │   ├── page.tsx              # My war record: faction, contributions, defection
-│   │   │   └── opengraph-image.tsx   # Dynamic OG image for profile sharing
-│   │   └── leaderboard/page.tsx      # 48-faction real-time territory rankings
+│   │   │   ├── page.tsx              # My war record: faction, contributions, gas cost display
+│   │   │   └── opengraph-image.tsx   # Dynamic OG image (live rally/capture counts)
+│   │   ├── leaderboard/page.tsx      # 48-faction real-time territory rankings
+│   │   └── api/okx-price/route.ts    # OKX price proxy (OKB/USDT ticker)
 │   ├── components/
 │   │   ├── WorldMap.tsx              # D3-geo + TopoJSON map with faction coloring
 │   │   ├── WorldMapPreview.tsx       # Mini map preview for homepage hero
-│   │   ├── RegionSidebar.tsx         # Region detail panel + rally button + capture history
+│   │   ├── RegionSidebar.tsx         # Region detail panel + real capture history from Indexer
 │   │   ├── MapLegend.tsx             # Faction territory leaderboard overlay
 │   │   ├── StatsCounter.tsx          # Animated counter with IntersectionObserver
+│   │   ├── GasCostBadge.tsx          # Estimated gas cost in USD (OKX price API)
 │   │   └── Navbar.tsx                # Navigation + RainbowKit wallet connect
+│   ├── hooks/
+│   │   └── useOkbPrice.ts            # OKB/USDT price hook (60s cache)
 │   ├── config/
 │   │   ├── factions.ts               # 48 faction definitions (colors, names, anchors)
 │   │   ├── contracts.ts              # Contract addresses + chain config + OKLink helpers
@@ -230,9 +251,10 @@ TIFO is built to be a native X Layer application, deeply integrated with the OKX
 
 | Integration | How |
 |------------|-----|
-| **OKX Wallet** | First-class wallet connector via RainbowKit. Users connect, sign rallies, and manage factions directly from OKX Wallet |
+| **OKX Wallet** | First-class wallet connector via RainbowKit (`okxWallet` in "Recommended" group). Users connect, sign rallies, and manage factions directly from OKX Wallet |
 | **X Layer Testnet** | All contracts deployed on chainId 195. The high-frequency rally pattern leverages X Layer's low gas costs |
 | **OKLink Verification** | All contract source code verified on OKLink. The verifiability panel in the frontend links every territory event directly to its OKLink transaction page |
+| **OKX DEX Price API** | Real-time OKB/USDT price fetched via `/api/okx-price` route. `GasCostBadge` component displays estimated gas cost per rally in USD (~$0.001), demonstrating X Layer's cost advantage |
 | **zkEVM Compatibility** | Contracts compiled with `evm_version = "paris"` (avoids PUSH0/Shanghai) for full X Layer zkEVM compatibility |
 
 ---

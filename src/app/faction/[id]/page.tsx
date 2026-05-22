@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useMemo } from 'react';
+import { use, useMemo, useState, useEffect } from 'react';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import { getFactionById } from '@/config/factions';
@@ -25,15 +25,7 @@ const FACTION_FLAGS: Record<string, string> = {
   JO: '\u{1F1EF}\u{1F1F4}', IQ: '\u{1F1EE}\u{1F1F6}', NZ: '\u{1F1F3}\u{1F1FF}', JM: '\u{1F1EF}\u{1F1F2}', TR: '\u{1F1F9}\u{1F1F7}', TN: '\u{1F1F9}\u{1F1F3}',
 };
 
-/* ── Mock contributors ───────────────────────────────────────────────────── */
-
-function generateMockContributors(factionId: number) {
-  const base = factionId * 7 + 3;
-  return Array.from({ length: 10 }, (_, i) => ({
-    address: `0x${((base + i) * 0xABCDEF1234).toString(16).padStart(40, '0').slice(0, 40)}`,
-    amount: ((10 - i) * 250 + factionId * 13) / 1,
-  }));
-}
+const INDEXER_API = process.env.NEXT_PUBLIC_INDEXER_API || '';
 
 /* ── Page ─────────────────────────────────────────────────────────────────── */
 
@@ -91,7 +83,17 @@ export default function FactionDetailPage({ params }: { params: Promise<{ id: st
 
   const prizePool = rawPrizePool ? formatEther(rawPrizePool as bigint) : '0';
   const memberCount = rawMemberCount ? Number(rawMemberCount) : 0;
-  const mockContributors = useMemo(() => generateMockContributors(factionId), [factionId]);
+  const [contributors, setContributors] = useState<{user: string; rallyCount: number; totalContributed: string}[]>([]);
+
+  useEffect(() => {
+    if (!INDEXER_API) return;
+    let cancelled = false;
+    fetch(`${INDEXER_API}/faction/${factionId}`)
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => { if (!cancelled) setContributors(data.topContributors || []); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [factionId]);
 
   /* ── Guard ─────────────────────────────────────────────────────────────── */
 
@@ -200,7 +202,7 @@ export default function FactionDetailPage({ params }: { params: Promise<{ id: st
           )}
         </section>
 
-        {/* ── Top contributors (mock) ────────────────────────────────────── */}
+        {/* ── Top contributors ────────────────────────────────────── */}
         <section>
           <h2 className="text-lg font-bold mb-4">Top Contributors</h2>
           <div className="rounded-xl border border-gray-800 bg-gray-900/50 backdrop-blur overflow-x-auto">
@@ -213,14 +215,14 @@ export default function FactionDetailPage({ params }: { params: Promise<{ id: st
                 </tr>
               </thead>
               <tbody>
-                {mockContributors.map((c, i) => (
+                {contributors.map((c, i) => (
                   <tr key={i} className="border-b border-gray-800/40 hover:bg-gray-800/30 transition-colors">
                     <td className="px-3 sm:px-4 py-2.5 text-gray-500 font-mono">{i + 1}</td>
                     <td className="px-3 sm:px-4 py-2.5 font-mono text-xs text-gray-300">
-                      <span className="sm:hidden">{c.address.slice(0, 6)}...{c.address.slice(-4)}</span>
-                      <span className="hidden sm:inline">{c.address.slice(0, 10)}...{c.address.slice(-6)}</span>
+                      <span className="sm:hidden">{c.user.slice(0, 6)}...{c.user.slice(-4)}</span>
+                      <span className="hidden sm:inline">{c.user.slice(0, 10)}...{c.user.slice(-6)}</span>
                     </td>
-                    <td className="px-3 sm:px-4 py-2.5 text-right font-semibold tabular-nums">{c.amount.toLocaleString()}</td>
+                    <td className="px-3 sm:px-4 py-2.5 text-right font-semibold tabular-nums">{(parseFloat(c.totalContributed) / 1e18).toLocaleString(undefined, {maximumFractionDigits: 2})}</td>
                   </tr>
                 ))}
               </tbody>

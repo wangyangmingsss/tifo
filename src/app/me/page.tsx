@@ -8,6 +8,7 @@ import { CONTRACTS } from '@/config/contracts';
 import { FactionRegistryABI } from '@/config/abi/FactionRegistry';
 import { TerritoryMapABI } from '@/config/abi/TerritoryMap';
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useOkbPrice } from '@/hooks/useOkbPrice';
 
 /* ── Flag map ────────────────────────────────────────────────────────────── */
 
@@ -42,6 +43,7 @@ const FACTION_FLAGS: Record<string, string> = {
 // PLACEHOLDER
 export default function MePage() {
   const { address, isConnected } = useAccount();
+  const { price: okbPrice } = useOkbPrice();
 
   /* ── On-chain reads (only when connected) ──────────────────────────────── */
 
@@ -255,6 +257,15 @@ export default function MePage() {
                     <div className="text-xs text-gray-500 uppercase">Faction Territories</div>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Gas cost note */}
+            {faction && okbPrice !== null && (
+              <div className="rounded-lg bg-gray-800/40 border border-gray-700/50 px-4 py-3 mb-6">
+                <p className="text-xs text-gray-400">
+                  Rally gas cost: ~${(0.000021 * okbPrice) < 0.01 ? '<$0.01' : `$${(0.000021 * okbPrice).toFixed(3)}`} per transaction on X Layer
+                </p>
               </div>
             )}
 

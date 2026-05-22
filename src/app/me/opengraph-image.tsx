@@ -6,6 +6,24 @@ export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
 export default async function Image() {
+  /* Fetch live totals from the Indexer API */
+  let totalRallies = '48';
+  let totalCaptures = '200';
+  try {
+    const indexerApi = process.env.NEXT_PUBLIC_INDEXER_API;
+    if (indexerApi) {
+      const res = await fetch(`${indexerApi}/stats`, { next: { revalidate: 60 } });
+      if (res.ok) {
+        const data = await res.json();
+        const totals = data.totals || data;
+        if (totals.rallies != null) totalRallies = String(totals.rallies);
+        if (totals.captures != null) totalCaptures = String(totals.captures);
+      }
+    }
+  } catch {
+    // fall back to static values
+  }
+
   return new ImageResponse(
     (
       <div
@@ -118,8 +136,8 @@ export default async function Image() {
               color: '#e0e7ff',
             }}
           >
-            <span style={{ fontWeight: 700, color: '#818cf8', fontSize: 28 }}>48</span>
-            <span>Factions</span>
+            <span style={{ fontWeight: 700, color: '#818cf8', fontSize: 28 }}>{totalRallies}</span>
+            <span>Rallies</span>
           </div>
           <div
             style={{
@@ -134,8 +152,8 @@ export default async function Image() {
               color: '#e0e7ff',
             }}
           >
-            <span style={{ fontWeight: 700, color: '#818cf8', fontSize: 28 }}>200</span>
-            <span>Regions</span>
+            <span style={{ fontWeight: 700, color: '#818cf8', fontSize: 28 }}>{totalCaptures}</span>
+            <span>Captures</span>
           </div>
           <div
             style={{
