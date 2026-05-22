@@ -1,0 +1,14 @@
+# Foundry
+contracts/out/
+contracts/cache/
+contracts/lib/
+
+# Node
+node_modules/
+.next/
+.env
+.env.local
+
+# OS
+.DS_Store
+*.swp
