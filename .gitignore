@@ -15,3 +15,5 @@ __MACOSX/
 .idea/
 .vscode/
 contracts/lib/
+contracts/broadcast/
+contracts/cache/

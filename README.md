@@ -105,17 +105,19 @@ MOCK_USDT=<addr> FACTION_REGISTRY=<addr> TERRITORY_MAP=<addr> MATCH_ORACLE=<addr
 
 ## Deployed Contracts (X Layer Testnet)
 
-All contracts deployed and verified on X Layer Testnet (chainId 195). Explorer: [OKLink X Layer Test](https://www.oklink.com/xlayer-test)
+All contracts deployed, wired, seeded, and source-verified on X Layer Testnet (chainId 195). Explorer: [OKLink X Layer Test](https://www.oklink.com/xlayer-test)
 
-| Contract | Address |
-|---|---|
-| MockUSDT | [`0x243549dBe315Bb930F2D32eBB7F883eEF123D110`](https://www.oklink.com/xlayer-test/address/0x243549dBe315Bb930F2D32eBB7F883eEF123D110) |
-| WarChest | [`0x4941FF4271a4AF1b834b853AA5dEC4254295eb30`](https://www.oklink.com/xlayer-test/address/0x4941FF4271a4AF1b834b853AA5dEC4254295eb30) |
-| FactionRegistry | [`0xfA0ad3bc7D00D1035Ed6333E5bb6e44E8f4F8c78`](https://www.oklink.com/xlayer-test/address/0xfA0ad3bc7D00D1035Ed6333E5bb6e44E8f4F8c78) |
-| TerritoryMap | [`0x265F465eb1828853990DDACA6121C70E67dD025a`](https://www.oklink.com/xlayer-test/address/0x265F465eb1828853990DDACA6121C70E67dD025a) |
-| MatchOracle | [`0x2EBD2f3B32544B9FDE1d95B7F40a103cd69F6Ab9`](https://www.oklink.com/xlayer-test/address/0x2EBD2f3B32544B9FDE1d95B7F40a103cd69F6Ab9) |
+| Contract | Address | Verified |
+|---|---|---|
+| MockUSDT | [`0x212E0207999B982b2F4B8f91cA421D94dc8438e3`](https://www.oklink.com/xlayer-test/address/0x212E0207999B982b2F4B8f91cA421D94dc8438e3) | Yes |
+| WarChest | [`0x2E587e2E830D637B80e3a23db7001a92582f1352`](https://www.oklink.com/xlayer-test/address/0x2E587e2E830D637B80e3a23db7001a92582f1352) | Yes |
+| FactionRegistry | [`0x80449696e9F2DBEBC7F154805320f49ae5aA6E23`](https://www.oklink.com/xlayer-test/address/0x80449696e9F2DBEBC7F154805320f49ae5aA6E23) | Yes |
+| TerritoryMap | [`0x4987CFAF2CA1650887786C83746CcEC4d4941331`](https://www.oklink.com/xlayer-test/address/0x4987CFAF2CA1650887786C83746CcEC4d4941331) | Yes |
+| MatchOracle | [`0x57E585543940cCfAB71141d84A419C3F7872d5be`](https://www.oklink.com/xlayer-test/address/0x57E585543940cCfAB71141d84A419C3F7872d5be) | Yes |
 
-Deployer: `0xA01fb14B58BDB67A8f07977273f8a2cA04078542` | Regions: 200 | Deployed: 2026-05-22
+Deployer: `0xA01fb14B58BDB67A8f07977273f8a2cA04078542` | Regions: 200 | Factions seeded: 48 | Deployed: 2026-05-22
+
+**On-chain activity:** 30 simulated fans, 150+ rallies, 6 goal surges, multiple territory captures — inspect events on OKLink to see the system running at full tilt.
 
 ## Design Choices (Honest Engineering Notes)
 
