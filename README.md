@@ -160,7 +160,7 @@ Five contracts and two libraries form the on-chain protocol:
 
 | Contract | Purpose | Key Functions |
 |----------|---------|---------------|
-| `FactionRegistry.sol` | Maps wallets to factions. First join is free; switching costs a fee routed to WarChest | `joinFaction()`, `factionOf()`, `isEnrolled()` |
+| `FactionRegistry.sol` | Maps wallets to factions. First join is free; switching costs a fee routed to WarChest. Records `enrolledAt` timestamp per user | `joinFaction()`, `factionOf()`, `isEnrolled()`, `enrolledAt()` |
 | `TerritoryMap.sol` | The heart of TIFO. 200 regions contested by 48 factions with decay, underdog bonus, and defection | `rally()`, `defect()`, `getMapState()`, `effectivePower()` |
 | `WarChest.sol` | Collects the 2% protocol fee from every rally. Distributes prizes to winning factions at season settlement | `claim()`, `bumpContribTotal()` |
 | `MatchOracle.sol` | Operator-controlled bridge from real match events to on-chain power surges | `pushMatchEvent()` (WHISTLE, GOAL, RED_CARD, FINAL) |
@@ -234,7 +234,7 @@ This ensures users discover the defection mechanic regardless of which page they
 | `/map` | Territory Map | Full-screen D3-geo world map colored by faction ownership. Click any region for details + rally button + **defection entry** |
 | `/rally/[regionId]` | Rally Panel | Slider to select commit amount, real-time underdog bonus preview, power change prediction, wagmi `rally()` transaction with approve flow, **inline faucet button** when balance is zero, **defection panel with faction-switch prompt** |
 | `/faction/[id]` | Faction Details | Territory count, WarChest prize pool, member count, owned regions list, top contributors, **power curve (24h territory trend chart)**, **"Rally Reinforcements" Share on X button for social viral loop** |
-| `/me` | My War Record | **Faucet card** (claim 1,000 mUSDT with cooldown indicator + OKLink tx link), faction enrollment (join/switch), contribution stats, **passive yield display (WarChest accrual + claim entry)**, defection opportunities, share on X |
+| `/me` | My War Record | **Faucet card** (claim 1,000 mUSDT with cooldown indicator + OKLink tx link), faction enrollment (join/switch), **real contribution stats from Indexer API** (USDT contributed, regions rallied, rally count), **passive yield display (WarChest accrual + claim entry)**, defection opportunities, share on X |
 | `/leaderboard` | Faction Leaderboard | 48 factions ranked by territory count, gold/silver/bronze top-3 styling |
 
 ### Dynamic OG Images (Social Sharing)
@@ -294,6 +294,7 @@ The indexer (`apps/indexer/`) is a TypeScript service that subscribes to all TIF
 | `GET /region/:id/history` | Complete capture timeline + OKLink tx links |
 | `GET /leaderboard` | Faction rankings by territory count |
 | `GET /faction/:id` | Faction details, contributors, captures |
+| `GET /user/:address` | User contribution stats (total contributed, regions rallied, rally count) |
 | `GET /stats` | Global on-chain statistics + most contested regions |
 
 ### Verifiability Panel
@@ -322,7 +323,7 @@ The correspondent (`apps/correspondent/`) monitors three on-chain events and aut
 | `MatchEventPushed` | `"⚽ GOAL! 🇪🇸 Spain — Power surge across 3 regions!"` |
 | **Countdown** (daily) | `"📅 19 days until kickoff! Current Territory Leaderboard: 🥇 Brazil: 35 territories..."` |
 
-Each tweet includes OKLink transaction proof, `@0xWangyangming @aspect_build #TIFO #XLayer` tags, and 3 randomized template variants for variety.
+Each tweet includes OKLink transaction proof, `@0xWangyangming @aspect_build #TIFO #XLayer` tags, and 3 randomized template variants for variety (including countdown tweets).
 
 ### DeepSeek V4 AI Integration
 
@@ -533,6 +534,7 @@ The Indexer and Correspondent services require a server with PostgreSQL to run, 
 - `http://76.13.189.224/api/leaderboard` — 48-faction territory rankings
 - `http://76.13.189.224/api/stats` — Global on-chain statistics
 - `http://76.13.189.224/api/faction/:id` — Faction details + contributors
+- `http://76.13.189.224/api/user/:address` — User contribution stats (total USDT contributed, regions rallied)
 - `http://76.13.189.224/api/region/:id/history` — Full capture history + OKLink proof links
 
 ### Architecture

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import { FACTIONS, FACTION_COUNT, getFactionById, NO_FACTION } from '@/config/factions';
@@ -153,9 +153,34 @@ export default function MePage() {
     return faction.id < counts.length ? Number(counts[faction.id]) : 0;
   }, [rawCounts, faction]);
 
-  // Mock contribution stats
-  const mockTotalContributed = 1250;
-  const mockRegionsParticipated = 7;
+  // Real contribution stats from Indexer API
+  const INDEXER_API = process.env.NEXT_PUBLIC_INDEXER_API || '';
+  const [totalContributed, setTotalContributed] = useState<number>(0);
+  const [regionsParticipated, setRegionsParticipated] = useState<number>(0);
+  const [rallyCount, setRallyCount] = useState<number>(0);
+  const [contribLoading, setContribLoading] = useState(true);
+
+  useEffect(() => {
+    if (!address || !INDEXER_API) {
+      setContribLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setContribLoading(true);
+    fetch(`${INDEXER_API}/user/${address}`)
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => {
+        if (cancelled) return;
+        setTotalContributed(parseFloat(data.totalContributedFormatted) || 0);
+        setRegionsParticipated(data.regionsParticipated || 0);
+        setRallyCount(data.rallyCount || 0);
+        setContribLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setContribLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [address, INDEXER_API]);
 
   /* ── Passive yield estimation ──────────────────────────────────────── */
 
@@ -393,14 +418,18 @@ export default function MePage() {
                   </Link>
                 </div>
 
-                {/* Mock stats */}
+                {/* Contribution stats */}
                 <div className="grid grid-cols-3 gap-4 mt-4">
                   <div className="rounded-lg bg-gray-800/50 p-3 text-center">
-                    <div className="text-lg font-bold tabular-nums">{mockTotalContributed.toLocaleString()}</div>
+                    <div className="text-lg font-bold tabular-nums">
+                      {contribLoading ? '...' : totalContributed.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </div>
                     <div className="text-xs text-gray-500 uppercase">USDT Contributed</div>
                   </div>
                   <div className="rounded-lg bg-gray-800/50 p-3 text-center">
-                    <div className="text-lg font-bold tabular-nums">{mockRegionsParticipated}</div>
+                    <div className="text-lg font-bold tabular-nums">
+                      {contribLoading ? '...' : regionsParticipated}
+                    </div>
                     <div className="text-xs text-gray-500 uppercase">Regions Rallied</div>
                   </div>
                   <div className="rounded-lg bg-gray-800/50 p-3 text-center">

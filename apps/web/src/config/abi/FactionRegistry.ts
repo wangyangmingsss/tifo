@@ -51,6 +51,17 @@ export const FactionRegistryABI = [
     stateMutability: 'view',
   },
   {
+    type: 'function',
+    name: 'enrolledAt',
+    inputs: [
+      { name: 'user', type: 'address', internalType: 'address' },
+    ],
+    outputs: [
+      { name: '', type: 'uint64', internalType: 'uint64' },
+    ],
+    stateMutability: 'view',
+  },
+  {
     type: 'event',
     name: 'FactionJoined',
     inputs: [

@@ -14,6 +14,7 @@ contract FactionRegistry {
 
     mapping(address => uint8) internal _factionOf;
     mapping(address => bool) internal _enrolled;
+    mapping(address => uint64) public enrolledAt;
     mapping(uint8 => uint256) public memberCount;
     uint256 public switchFee = 100e18;
 
@@ -42,6 +43,7 @@ contract FactionRegistry {
 
         _factionOf[msg.sender] = factionId;
         _enrolled[msg.sender] = true;
+        enrolledAt[msg.sender] = uint64(block.timestamp);
         memberCount[factionId]++;
 
         emit FactionJoined(msg.sender, factionId, isSwitch);

@@ -119,5 +119,13 @@ export function tweetCountdown(params: {
     .map((f, i) => `${['🥇', '🥈', '🥉'][i]} ${f.name}: ${f.territories} territories`)
     .join('\n');
 
-  return `📅 ${daysUntilKickoff} days until kickoff!\n\nCurrent Territory Leaderboard:\n${leaderboard}\n\nIs your faction ready? Rally now before it's too late.\n\n${config.projectHandle} @aspect_build #TIFO #WorldCup2026 #XLayer`;
+  const templates = [
+    `📅 ${daysUntilKickoff} days until kickoff!\n\nCurrent Territory Leaderboard:\n${leaderboard}\n\nIs your faction ready? Rally now before it's too late.\n\n${config.projectHandle} @aspect_build #TIFO #WorldCup2026 #XLayer`,
+
+    `⏳ T-minus ${daysUntilKickoff} days to the World Cup!\n\nWho's winning the territory war?\n${leaderboard}\n\nEvery hour your land decays. Defend it or lose it.\n\n${config.projectHandle} #TIFO #XLayer #WorldCup2026`,
+
+    `🏟️ ${daysUntilKickoff} days remain!\n\nThe map never sleeps. Current standings:\n${leaderboard}\n\nRally your nation. Hold your ground. The clock is ticking.\n\n${config.projectHandle} @aspect_build #TIFO #WorldCup2026`,
+  ];
+
+  return pick(templates);
 }

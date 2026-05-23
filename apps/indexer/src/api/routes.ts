@@ -356,6 +356,85 @@ router.get('/faction/:id', async (req: Request, res: Response) => {
   }
 });
 
+// ---------- GET /user/:address ----------
+// User-specific contribution stats for the /me page
+router.get('/user/:address', async (req: Request, res: Response) => {
+  try {
+    const userAddress = req.params.address.toLowerCase();
+    if (!/^0x[a-f0-9]{40}$/.test(userAddress)) {
+      res.status(400).json({ error: 'Invalid address' });
+      return;
+    }
+
+    // Total contributed (sum of raw_amount across all rallies)
+    const contribResult = await query(
+      `SELECT COALESCE(SUM(raw_amount::numeric), 0) as total_contributed,
+              COUNT(*) as rally_count,
+              COUNT(DISTINCT region_id) as regions_participated
+       FROM rallies
+       WHERE LOWER(user_address) = $1`,
+      [userAddress]
+    );
+
+    // Faction membership
+    const joinResult = await query(
+      `SELECT faction_id, timestamp, tx_hash
+       FROM faction_joins
+       WHERE LOWER(user_address) = $1
+       ORDER BY block_number DESC
+       LIMIT 1`,
+      [userAddress]
+    );
+
+    // Defections by this user
+    const defectResult = await query(
+      `SELECT COUNT(*) as defection_count
+       FROM defections
+       WHERE LOWER(user_address) = $1`,
+      [userAddress]
+    );
+
+    // Recent rallies (last 20)
+    const recentRallies = await query(
+      `SELECT region_id, faction_id, raw_amount, effective_power, block_number, tx_hash, timestamp
+       FROM rallies
+       WHERE LOWER(user_address) = $1
+       ORDER BY block_number DESC
+       LIMIT 20`,
+      [userAddress]
+    );
+
+    const contrib = contribResult.rows[0];
+
+    res.json({
+      address: userAddress,
+      totalContributed: contrib.total_contributed,
+      totalContributedFormatted: (parseFloat(contrib.total_contributed) / 1e18).toFixed(2),
+      rallyCount: parseInt(contrib.rally_count),
+      regionsParticipated: parseInt(contrib.regions_participated),
+      defectionCount: parseInt(defectResult.rows[0]?.defection_count || '0'),
+      currentFaction: joinResult.rows[0] ? {
+        factionId: joinResult.rows[0].faction_id,
+        joinedAt: joinResult.rows[0].timestamp,
+        txHash: joinResult.rows[0].tx_hash,
+      } : null,
+      recentRallies: recentRallies.rows.map((r) => ({
+        regionId: r.region_id,
+        factionId: r.faction_id,
+        rawAmount: r.raw_amount,
+        effectivePower: r.effective_power,
+        blockNumber: r.block_number,
+        txHash: r.tx_hash,
+        oklinkUrl: `https://www.oklink.com/xlayer-test/tx/${r.tx_hash}`,
+        timestamp: r.timestamp,
+      })),
+    });
+  } catch (err: any) {
+    console.error('[api] /user/:address error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------- GET /stats ----------
 router.get('/stats', async (_req: Request, res: Response) => {
   try {

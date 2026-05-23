@@ -317,17 +317,21 @@ contract TifoTest is Test {
     }
 
     function test_WarChest_SettleThenClaim() public {
+        // Wire map as updater so rally() auto-bumps claim denominator
+        chest.setUpdater(address(map));
+
         // ARG takes region 0 via alice
         vm.prank(alice);
         registry.joinFaction(ARG);
         vm.prank(alice);
         map.rally(0, 100e18);
 
-        // fund the faction pool directly + mirror contrib total
+        // Verify auto wiring: bumpContribTotal called by rally() callback
+        assertEq(chest.regionFactionContribTotal(0, ARG), 100e18);
+
+        // fund the faction pool directly
         token.mint(address(chest), 1000e18);
         chest.deposit(ARG, 1000e18, address(this));
-        chest.setUpdater(address(this));
-        chest.bumpContribTotal(0, ARG, 100e18); // mirror alice's contribution
 
         chest.settleSeason();
         assertTrue(chest.settled());
