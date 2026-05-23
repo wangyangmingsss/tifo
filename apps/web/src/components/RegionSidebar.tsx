@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { FACTIONS, NO_FACTION, getFactionById, type Faction } from '@/config/factions';
-import { oklinkTx } from '@/config/contracts';
+import { oklinkTx, CONTRACTS } from '@/config/contracts';
 import { getCountryName, regionIdToCountry } from '@/config/regionMapping';
-import { useAccount } from 'wagmi';
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { FactionRegistryABI } from '@/config/abi/FactionRegistry';
+import { TerritoryMapABI } from '@/config/abi/TerritoryMap';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -116,11 +118,50 @@ function generateMockCaptureHistory(regionId: number): CaptureEvent[] {
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function RegionSidebar({ regionId, ownerFactionId, onClose }: RegionSidebarProps) {
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
   const countryId = regionIdToCountry[regionId] ?? '000';
   const countryName = getCountryName(countryId);
   const flag = getFlag(countryId);
   const ownerFaction = ownerFactionId !== NO_FACTION ? getFactionById(ownerFactionId) : null;
+
+  // ── User faction reads ──────────────────────────────────────────────────────
+  const { data: rawUserFaction } = useReadContract({
+    address: CONTRACTS.FactionRegistry as `0x${string}`,
+    abi: FactionRegistryABI,
+    functionName: 'factionOf',
+    args: address ? [address] : undefined,
+    query: { enabled: !!address },
+  });
+
+  const { data: isEnrolled } = useReadContract({
+    address: CONTRACTS.FactionRegistry as `0x${string}`,
+    abi: FactionRegistryABI,
+    functionName: 'isEnrolled',
+    args: address ? [address] : undefined,
+    query: { enabled: !!address },
+  });
+
+  const userFactionId = rawUserFaction !== undefined ? Number(rawUserFaction) : undefined;
+  const userFaction = userFactionId !== undefined ? getFactionById(userFactionId) : undefined;
+
+  // Can defect if: enrolled, user is in the OWNER faction, and the region is not neutral
+  // (defect converts OLD contributions from a DIFFERENT faction the user previously supported)
+  const canShowDefect = isConnected && isEnrolled && ownerFactionId !== NO_FACTION
+    && userFactionId !== undefined && userFactionId === ownerFactionId;
+
+  // ── Defect transaction ──────────────────────────────────────────────────────
+  const { writeContract: doDefect, data: defectHash, isPending: defectPending, error: defectError, reset: resetDefect } = useWriteContract();
+  const { isLoading: defectConfirming, isSuccess: defectSuccess } = useWaitForTransactionReceipt({ hash: defectHash });
+
+  const handleDefect = () => {
+    resetDefect();
+    doDefect({
+      address: CONTRACTS.TerritoryMap as `0x${string}`,
+      abi: TerritoryMapABI,
+      functionName: 'defect',
+      args: [regionId],
+    });
+  };
 
   // ── Fetch real capture history from Indexer API ──────────────────────────────
   const [captureHistory, setCaptureHistory] = useState<CaptureEvent[]>([]);
@@ -291,6 +332,50 @@ export default function RegionSidebar({ regionId, ownerFactionId, onClose }: Reg
                 Connect Wallet First
               </button>
             )}
+          </div>
+
+          {/* Defect Button — visible when user is in the owner faction */}
+          {canShowDefect && (
+            <div className="p-4 border-b border-gray-700/30">
+              <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-xl flex-shrink-0">{'\u{1F5E1}\uFE0F'}</span>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-bold text-red-400 mb-1">Defection Available</h4>
+                    <p className="text-xs text-gray-400 mb-3">
+                      Convert your old faction contributions in this region into power for {ownerFaction?.name ?? 'the current owner'}.
+                      80% converts to faction power, 20% is your finder&apos;s reward.
+                    </p>
+                    <button
+                      onClick={handleDefect}
+                      disabled={defectPending || defectConfirming}
+                      className="w-full py-2 rounded-lg border border-red-500/40 bg-red-500/10 text-sm font-semibold text-red-400
+                        transition-colors hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {defectPending ? 'Signing...' : defectConfirming ? 'Confirming...' : defectSuccess ? 'Defected!' : 'Defect & Reclaim'}
+                    </button>
+                    {defectError && (
+                      <p className="mt-2 text-xs text-red-400/70 break-all">
+                        {defectError.message?.includes('NoDefectableContribution')
+                          ? 'No defectable contribution found in this region'
+                          : 'Defection failed — check your faction and contributions'}
+                      </p>
+                    )}
+                    {defectSuccess && defectHash && (
+                      <a
+                        href={oklinkTx(defectHash)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-2 inline-block text-xs text-amber-400 hover:text-amber-300 underline"
+                      >
+                        View on OKLink &rarr;
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           </div>
 
           {/* Capture count */}

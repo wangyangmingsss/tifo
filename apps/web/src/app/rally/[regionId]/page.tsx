@@ -12,7 +12,7 @@ import { TerritoryMapABI } from '@/config/abi/TerritoryMap';
 import { FactionRegistryABI } from '@/config/abi/FactionRegistry';
 import { MockUSDTABI } from '@/config/abi/MockUSDT';
 import { regionIdToCountry, getCountryName, isValidRegion } from '@/config/regionMapping';
-import { getFactionById, NO_FACTION } from '@/config/factions';
+import { getFactionById, NO_FACTION, FACTIONS } from '@/config/factions';
 
 // ---------------------------------------------------------------------------
 // Parse Solidity revert reasons into user-friendly messages
@@ -272,6 +272,23 @@ export default function RallyPage({ params }: { params: { regionId: string } }) 
 
   const isDefending = userFactionId !== undefined && Number(userFactionId) === ownerFactionId && ownerFactionId !== NO_FACTION;
 
+  // -- defect hooks --
+  const { writeContract: doDefect, data: defectTxHash, isPending: defectPending, error: defectError, reset: resetDefect } = useWriteContract();
+  const { isLoading: defectConfirming, isSuccess: defectSuccess } = useWaitForTransactionReceipt({ hash: defectTxHash });
+
+  const canShowDefect = isConnected && enrolled && ownerFactionId !== NO_FACTION
+    && userFactionId !== undefined && Number(userFactionId) === ownerFactionId;
+
+  const handleDefect = () => {
+    resetDefect();
+    doDefect({
+      address: CONTRACTS.TerritoryMap as `0x${string}`,
+      abi: TerritoryMapABI,
+      functionName: 'defect',
+      args: [regionId],
+    });
+  };
+
   // -------------------------------------------------------------------------
   // RENDER
   // -------------------------------------------------------------------------
@@ -517,6 +534,52 @@ export default function RallyPage({ params }: { params: { regionId: string } }) 
                 >
                   View on OKLink &rarr;
                 </a>
+              </div>
+            )}
+
+            {/* Defection panel — visible when user is in the owner faction */}
+            {canShowDefect && (
+              <div className="rounded-2xl border border-red-500/30 bg-red-950/20 p-6">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl flex-shrink-0">{'\u{1F5E1}\uFE0F'}</span>
+                  <div className="flex-1">
+                    <h3 className="text-base font-bold text-red-400 mb-1">Defection Available</h3>
+                    <p className="text-sm text-gray-400 mb-4">
+                      You previously contributed to another faction in this region.
+                      Defect to convert 80% of that stale contribution into power for{' '}
+                      <span className="font-semibold" style={{ color: ownerFaction?.color }}>
+                        {ownerFaction?.name}
+                      </span>
+                      , with 20% as your finder&apos;s reward.
+                    </p>
+                    <button
+                      onClick={handleDefect}
+                      disabled={defectPending || defectConfirming}
+                      className="w-full py-3 rounded-xl border border-red-500/40 bg-red-500/10 text-sm font-bold text-red-400
+                        transition-all hover:bg-red-500/20 hover:scale-[1.01] active:scale-[0.99]
+                        disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {defectPending ? 'Signing...' : defectConfirming ? 'Confirming...' : defectSuccess ? 'Defected!' : 'Defect & Reclaim Power'}
+                    </button>
+                    {defectError && (
+                      <p className="mt-2 text-xs text-red-400/70">
+                        {defectError.message?.includes('NoDefectableContribution')
+                          ? 'No defectable contribution found in this region'
+                          : 'Defection failed — you may not have old-faction contributions here'}
+                      </p>
+                    )}
+                    {defectSuccess && defectTxHash && (
+                      <a
+                        href={oklinkTx(defectTxHash)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-2 inline-block text-sm text-amber-400 hover:text-amber-300 underline"
+                      >
+                        View defection on OKLink &rarr;
+                      </a>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </>
