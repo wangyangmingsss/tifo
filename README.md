@@ -233,8 +233,8 @@ This ensures users discover the defection mechanic regardless of which page they
 | `/` | Landing Page | Hero with animated world map preview, live stats counter, how-it-works guide |
 | `/map` | Territory Map | Full-screen D3-geo world map colored by faction ownership. Click any region for details + rally button + **defection entry** |
 | `/rally/[regionId]` | Rally Panel | Slider to select commit amount, real-time underdog bonus preview, power change prediction, wagmi `rally()` transaction with approve flow, **inline faucet button** when balance is zero, **defection panel with faction-switch prompt** |
-| `/faction/[id]` | Faction Details | Territory count, WarChest prize pool, member count, owned regions list, top contributors |
-| `/me` | My War Record | **Faucet card** (claim 1,000 mUSDT with cooldown indicator + OKLink tx link), faction enrollment (join/switch), contribution stats, defection opportunities, share on X |
+| `/faction/[id]` | Faction Details | Territory count, WarChest prize pool, member count, owned regions list, top contributors, **power curve (24h territory trend chart)**, **"Rally Reinforcements" Share on X button for social viral loop** |
+| `/me` | My War Record | **Faucet card** (claim 1,000 mUSDT with cooldown indicator + OKLink tx link), faction enrollment (join/switch), contribution stats, **passive yield display (WarChest accrual + claim entry)**, defection opportunities, share on X |
 | `/leaderboard` | Faction Leaderboard | 48 factions ranked by territory count, gold/silver/bronze top-3 styling |
 
 ### Dynamic OG Images (Social Sharing)
@@ -244,6 +244,22 @@ Both `/faction/[id]` and `/me` generate dynamic 1200x630 Open Graph images via `
 - **Profile OG**: War record branding with TIFO identity, `@0xWangyangming` + X Layer attribution
 
 These ensure tweet/share previews display rich, faction-specific cards that drive social engagement.
+
+### Power Curve (Faction Page)
+
+The `/faction/[id]` page includes a **24-hour power curve** — an SVG-rendered territory trend chart showing how many territories the faction held over the past 24 hours. When the indexer provides historical `powerHistory` data, it renders real data; otherwise, it generates a simulated trend based on the current territory count. The chart features grid lines, axis labels, area fill in faction color, and highlighted current data point.
+
+### Rally Reinforcements (Share on X)
+
+The `/faction/[id]` page includes a prominent **"Rally Reinforcements — Share on X"** button that generates a pre-filled tweet with the faction's current battle stats (territories held, prize pool, member count), faction flag emoji, and project hashtags. This drives social viral loops (社交裂变) as specified in the dev spec.
+
+### Passive Yield Display (War Record)
+
+The `/me` page shows WarChest **passive yield information**:
+- **Estimated accrued passive output** based on `passiveRatePerSecond`, faction territory count, and elapsed time since season start
+- **Season status** (Active / Settled) read from the WarChest contract
+- **Claim button** that calls `WarChest.claim()` when the season is settled, with OKLink transaction proof link
+- Passive rate per territory per hour displayed for transparency
 
 ---
 
