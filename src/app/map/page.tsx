@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useReadContract } from 'wagmi';
 import Navbar from '@/components/Navbar';
 import WorldMap, { generateMockMapState } from '@/components/WorldMap';
@@ -17,7 +17,7 @@ export default function MapPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Poll on-chain getMapState() every 15 seconds for real-time map rendering
-  const { data: onChainMapState, isLoading, isError } = useReadContract({
+  const { data: onChainMapState, isError } = useReadContract({
     address: CONTRACTS.TerritoryMap,
     abi: TerritoryMapABI,
     functionName: 'getMapState',

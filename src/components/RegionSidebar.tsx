@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FACTIONS, NO_FACTION, getFactionById, type Faction } from '@/config/factions';
 import { oklinkTx } from '@/config/contracts';
 import { getCountryName, regionIdToCountry } from '@/config/regionMapping';
@@ -125,7 +125,7 @@ export default function RegionSidebar({ regionId, ownerFactionId, onClose }: Reg
   // ── Fetch real capture history from Indexer API ──────────────────────────────
   const [captureHistory, setCaptureHistory] = useState<CaptureEvent[]>([]);
   const [powerRankings, setPowerRankings] = useState<PowerEntry[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(true);
+  const [_historyLoading, setHistoryLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -148,7 +148,7 @@ export default function RegionSidebar({ regionId, ownerFactionId, onClose }: Reg
         if (cancelled) return;
 
         // Map capture history from Indexer response
-        const captures: CaptureEvent[] = (data.captureHistory || []).map((c: any) => ({
+        const captures: CaptureEvent[] = (data.captureHistory || []).map((c: Record<string, unknown>) => ({
           timestamp: typeof c.timestamp === 'string' ? Math.floor(new Date(c.timestamp).getTime() / 1000) : c.timestamp,
           oldFactionId: c.oldFaction ?? NO_FACTION,
           newFactionId: c.newFaction,
