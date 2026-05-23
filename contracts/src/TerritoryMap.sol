@@ -3,15 +3,8 @@ pragma solidity 0.8.24;
 
 import {TifoTypes} from "./libraries/TifoTypes.sol";
 import {PowerMath} from "./libraries/PowerMath.sol";
-
-interface IFactionRegistry {
-    function factionOf(address user) external view returns (uint8);
-    function isEnrolled(address user) external view returns (bool);
-}
-
-interface IWarChestBump {
-    function bumpContribTotal(uint16 regionId, uint8 faction, uint256 amount) external;
-}
+import {IFactionRegistry} from "./interfaces/IFactionRegistry.sol";
+import {IWarChestBump} from "./interfaces/IWarChestBump.sol";
 
 /// @title TerritoryMap
 /// @notice The heart of TIFO. A fixed set of real-world regions is contested by

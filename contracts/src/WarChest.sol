@@ -2,15 +2,7 @@
 pragma solidity 0.8.24;
 
 import {TifoTypes} from "./libraries/TifoTypes.sol";
-
-interface ITerritoryMapView {
-    function territoryCounts() external view returns (uint256[] memory);
-    function regions(uint16 regionId)
-        external view returns (uint8 ownerFaction, uint64 lastUpdate, uint16 captureCount);
-    function contribution(uint16 regionId, uint8 faction, address user)
-        external view returns (uint256);
-    function regionCount() external view returns (uint16);
-}
+import {ITerritoryMapView} from "./interfaces/ITerritoryMapView.sol";
 
 contract WarChest {
     address public owner;

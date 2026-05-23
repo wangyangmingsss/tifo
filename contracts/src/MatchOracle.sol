@@ -2,10 +2,7 @@
 pragma solidity 0.8.24;
 
 import {TifoTypes} from "./libraries/TifoTypes.sol";
-
-interface ITerritoryMapBoost {
-    function applyMatchBoost(uint16 regionId, uint8 faction, uint256 boost) external;
-}
+import {ITerritoryMapBoost} from "./interfaces/ITerritoryMapBoost.sol";
 
 contract MatchOracle {
     enum EventType { GOAL, PENALTY, RED_CARD, WHISTLE }
