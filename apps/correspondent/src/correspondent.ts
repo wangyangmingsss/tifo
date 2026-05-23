@@ -10,7 +10,8 @@ import {
 } from 'viem';
 import { config } from './config';
 import { publishTweet } from './twitter';
-import { tweetTerritoryCaptured, tweetDefected, tweetMatchEvent } from './templates';
+import { tweetTerritoryCaptured, tweetDefected, tweetMatchEvent, tweetCountdown } from './templates';
+import { getFaction } from './factions';
 
 // ── ABIs (only events we care about) ──────────────────────────────
 
@@ -52,6 +53,21 @@ const MatchOracleEvents = [
     ],
   },
 ] as const;
+
+// ── ABI for territoryCounts view (used by countdown) ──────────────
+const TerritoryMapView = [
+  {
+    type: 'function' as const,
+    name: 'territoryCounts' as const,
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256[]' as const }],
+    stateMutability: 'view' as const,
+  },
+] as const;
+
+// ── World Cup 2026 kickoff date (June 11, 2026 UTC) ──────────────
+const WORLD_CUP_KICKOFF = new Date('2026-06-11T00:00:00Z');
+const COUNTDOWN_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // ── X Layer Testnet chain ──────────────────────────────────────────
 
@@ -113,6 +129,7 @@ export class Correspondent {
   private lastProcessedBlock: bigint;
   private rateLimiter: RateLimiter;
   private tweetCount = 0;
+  private lastCountdownTime = 0;
 
   constructor() {
     this.client = createPublicClient({
@@ -205,6 +222,56 @@ export class Correspondent {
     await publishTweet(tweetText);
   }
 
+  // ── Countdown tweet (once per 24h) ──────────────────────────────
+  private async checkCountdown(): Promise<void> {
+    const now = Date.now();
+    if (now - this.lastCountdownTime < COUNTDOWN_INTERVAL_MS) return;
+
+    const daysUntilKickoff = Math.ceil(
+      (WORLD_CUP_KICKOFF.getTime() - now) / (1000 * 60 * 60 * 24),
+    );
+
+    // Only post countdown if kickoff is in the future
+    if (daysUntilKickoff <= 0) return;
+
+    // Rate limit check
+    if (!this.rateLimiter.canProceed()) {
+      console.warn('[correspondent] Rate limited — skipping countdown tweet');
+      return;
+    }
+
+    try {
+      const counts = (await this.client.readContract({
+        address: config.contracts.territoryMap,
+        abi: TerritoryMapView,
+        functionName: 'territoryCounts',
+      })) as bigint[];
+
+      // Build top-3 leaderboard
+      const ranked = counts
+        .map((c, i) => ({ id: i, territories: Number(c) }))
+        .filter((f) => f.territories > 0)
+        .sort((a, b) => b.territories - a.territories)
+        .slice(0, 3)
+        .map((f) => ({
+          name: getFaction(f.id).name,
+          territories: f.territories,
+        }));
+
+      if (ranked.length === 0) return; // no territory data yet
+
+      const text = tweetCountdown({ daysUntilKickoff, top3: ranked });
+
+      this.rateLimiter.record();
+      this.tweetCount++;
+      this.lastCountdownTime = now;
+      console.log(`[correspondent] Countdown tweet: ${daysUntilKickoff} days until kickoff — tweet #${this.tweetCount}`);
+      await publishTweet(text);
+    } catch (err) {
+      console.error('[correspondent] Failed to generate countdown tweet:', err);
+    }
+  }
+
   async pollOnce(): Promise<number> {
     const latestBlock = await this.client.getBlockNumber();
     const safeBlock = latestBlock - BigInt(config.confirmationBlocks);
@@ -249,12 +316,17 @@ export class Correspondent {
     console.log(`[correspondent] Mode: ${config.dryRun ? 'DRY RUN (no tweets posted)' : 'LIVE (tweets will be posted)'}`);
     console.log(`[correspondent] Starting from block: ${this.lastProcessedBlock}`);
 
+    // Fire initial countdown check on startup
+    await this.checkCountdown();
+
     while (this.running) {
       try {
         const count = await this.pollOnce();
         if (count > 0) {
           console.log(`[correspondent] Processed ${count} events, total tweets: ${this.tweetCount}`);
         }
+        // Check countdown once per cycle (internally gated to 24h)
+        await this.checkCountdown();
       } catch (err) {
         console.error('[correspondent] Poll error:', err);
       }
