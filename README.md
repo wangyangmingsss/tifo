@@ -108,7 +108,9 @@ tifo/
 │   │   │   ├── page.tsx              # My war record: faction, contributions, gas cost display
 │   │   │   └── opengraph-image.tsx   # Dynamic OG image (live rally/capture counts)
 │   │   ├── leaderboard/page.tsx      # 48-faction real-time territory rankings
-│   │   └── api/okx-price/route.ts    # OKX price proxy (OKB/USDT ticker)
+│   │   └── api/
+│   │       ├── okx-price/route.ts    # OKX price proxy (DEX quote + public ticker fallback)
+│   │       └── okx-dex-quote/route.ts # OKX DEX Aggregator swap quote (HMAC authenticated)
 │   ├── components/
 │   │   ├── WorldMap.tsx              # D3-geo + TopoJSON map with faction coloring
 │   │   ├── WorldMapPreview.tsx       # Mini map preview for homepage hero
@@ -252,10 +254,10 @@ TIFO is built to be a native X Layer application, deeply integrated with the OKX
 
 | Integration | How |
 |------------|-----|
-| **OKX Wallet** | First-class wallet connector via RainbowKit (`okxWallet` in "Recommended" group). Users connect, sign rallies, and manage factions directly from OKX Wallet |
+| **OKX Wallet** | First-class wallet connector via RainbowKit (`okxWallet` in "Recommended" group). Users connect, sign rallies, and manage factions directly from OKX Wallet. Other wallets (MetaMask, WalletConnect, Coinbase) are available when `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` is configured |
 | **X Layer Testnet** | All contracts deployed on chainId 195. The high-frequency rally pattern leverages X Layer's low gas costs |
 | **OKLink Verification** | All contract source code verified on OKLink. The verifiability panel in the frontend links every territory event directly to its OKLink transaction page |
-| **OKX DEX Price API** | Real-time OKB/USDT price fetched via `/api/okx-price` route. `GasCostBadge` component displays estimated gas cost per rally in USD (~$0.001), demonstrating X Layer's cost advantage |
+| **OKX DEX Aggregator API** | Authenticated swap quote API (`/api/okx-dex-quote`) with HMAC-SHA256 signing using OKX DEX credentials. The `/api/okx-price` route uses DEX quotes as primary price source with public ticker fallback. `GasCostBadge` displays estimated gas cost per rally in USD (~$0.001) |
 | **zkEVM Compatibility** | Contracts compiled with `evm_version = "paris"` (avoids PUSH0/Shanghai) for full X Layer zkEVM compatibility |
 
 ---
@@ -303,9 +305,11 @@ The correspondent (`apps/correspondent/`) monitors three on-chain events and aut
 | `TerritoryCaptured` | `"⚔️ 🇧🇷 Brazil just seized Region #5 from 🇦🇷 Argentina!"` |
 | `Defected` | `"🗡️ BETRAYAL! A former 🇫🇷 France supporter defected to 🇩🇪 Germany"` |
 | `MatchEventPushed` | `"⚽ GOAL! 🇪🇸 Spain — Power surge across 3 regions!"` |
+| **Countdown** (daily) | `"📅 19 days until kickoff! Current Territory Leaderboard: 🥇 Brazil: 35 territories..."` |
 
 Each tweet includes OKLink transaction proof, `@0xWangyangming @aspect_build #TIFO #XLayer` tags, and 3 randomized template variants for variety.
 
+- **Countdown tweets**: Daily automated countdown to World Cup kickoff (June 11, 2026). Reads live `territoryCounts()` from the TerritoryMap contract to display the top-3 faction leaderboard. Fires on startup and every 24 hours thereafter.
 - **5-block confirmation buffer** to avoid tweeting reorged events
 - **Rate limiter**: max 10 tweets per 15-minute window
 - **Dry-run mode**: `DRY_RUN=true` logs tweets without posting
@@ -332,6 +336,12 @@ npm start     # live mode — posts to X
 ```bash
 # Install dependencies
 npm install
+
+# Copy environment template
+cp .env.example .env.local
+# Edit .env.local to set:
+#   OKX_DEX_API_KEY, OKX_DEX_SECRET_KEY, OKX_DEX_PASSPHRASE  (for DEX price quotes)
+#   NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID  (optional, for WalletConnect/Coinbase wallets)
 
 # Start development server
 npm run dev
