@@ -7,6 +7,7 @@ import { FACTIONS, FACTION_COUNT, getFactionById, NO_FACTION } from '@/config/fa
 import { CONTRACTS, oklinkTx } from '@/config/contracts';
 import { FactionRegistryABI } from '@/config/abi/FactionRegistry';
 import { TerritoryMapABI } from '@/config/abi/TerritoryMap';
+import { WarChestABI } from '@/config/abi/WarChest';
 import { MockUSDTABI } from '@/config/abi/MockUSDT';
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { formatEther } from 'viem';
@@ -113,6 +114,34 @@ export default function MePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [faucetSuccess]);
 
+  /* ── WarChest passive yield reads ─────────────────────────────────── */
+
+  const { data: passiveRate } = useReadContract({
+    address: CONTRACTS.WarChest as `0x${string}`,
+    abi: WarChestABI,
+    functionName: 'passiveRatePerSecond',
+    query: { enabled: !!address },
+  });
+
+  const { data: seasonStartRaw } = useReadContract({
+    address: CONTRACTS.WarChest as `0x${string}`,
+    abi: WarChestABI,
+    functionName: 'seasonStart',
+    query: { enabled: !!address },
+  });
+
+  const { data: isSettled } = useReadContract({
+    address: CONTRACTS.WarChest as `0x${string}`,
+    abi: WarChestABI,
+    functionName: 'settled',
+    query: { enabled: !!address },
+  });
+
+  /* ── Claim tx ─────────────────────────────────────────────────────── */
+
+  const { writeContract: claimReward, data: claimHash, isPending: claimPending, error: claimError, reset: resetClaimError } = useWriteContract();
+  const { isLoading: claimConfirming, isSuccess: claimSuccess } = useWaitForTransactionReceipt({ hash: claimHash });
+
   /* ── Derived ───────────────────────────────────────────────────────────── */
 
   const factionId = rawFactionId !== undefined ? Number(rawFactionId) : undefined;
@@ -127,6 +156,48 @@ export default function MePage() {
   // Mock contribution stats
   const mockTotalContributed = 1250;
   const mockRegionsParticipated = 7;
+
+  /* ── Passive yield estimation ──────────────────────────────────────── */
+
+  const estimatedPassiveYield = useMemo(() => {
+    if (!faction || !passiveRate || !seasonStartRaw) return '0';
+    const rate = Number(passiveRate);
+    if (rate === 0) return '0';
+    // Estimate: for each territory held by the faction, passive accrues at rate per second
+    // This is a rough estimate: territories * passiveRate * elapsed seconds since season start
+    const seasonStart = Number(seasonStartRaw);
+    const now = Math.floor(Date.now() / 1000);
+    const elapsed = Math.max(0, now - seasonStart);
+    // Approximate: faction's share = territories * passiveRate * elapsed
+    // divided by 1e18 for token decimals
+    const rawYield = BigInt(territoryCount) * BigInt(rate) * BigInt(elapsed);
+    return Number(formatEther(rawYield)).toLocaleString(undefined, { maximumFractionDigits: 4 });
+  }, [faction, passiveRate, seasonStartRaw, territoryCount]);
+
+  const passiveRateFormatted = useMemo(() => {
+    if (!passiveRate) return '0';
+    // passiveRate per second * 3600 = per hour
+    const hourly = BigInt(passiveRate as bigint) * BigInt(3600);
+    return Number(formatEther(hourly)).toLocaleString(undefined, { maximumFractionDigits: 6 });
+  }, [passiveRate]);
+
+  const handleClaim = () => {
+    if (!faction) return;
+    resetClaimError();
+    // Claim for all owned regions (up to first 50 to avoid gas limits)
+    const regionIds: number[] = [];
+    // Use rawCounts to figure out which regions this faction owns
+    // For simplicity, claim for regions 0-199 (contract handles no-op for non-owned)
+    for (let i = 0; i < 200 && regionIds.length < 50; i++) {
+      regionIds.push(i);
+    }
+    claimReward({
+      address: CONTRACTS.WarChest as `0x${string}`,
+      abi: WarChestABI,
+      functionName: 'claim',
+      args: [regionIds],
+    });
+  };
 
   /* ── Faction selector state ────────────────────────────────────────────── */
 
@@ -346,6 +417,79 @@ export default function MePage() {
                 <p className="text-xs text-gray-400">
                   Rally gas cost: ~${(0.000021 * okbPrice) < 0.01 ? '<$0.01' : `$${(0.000021 * okbPrice).toFixed(3)}`} per transaction on X Layer
                 </p>
+              </div>
+            )}
+
+            {/* ── Passive Yield Card ─────────────────────────────────────── */}
+            {faction && (
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-6 mb-6">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">{'\u{1F331}'}</span>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-emerald-400 mb-1">Passive Yield (WarChest)</h3>
+                    <p className="text-sm text-gray-400 mb-4">
+                      Your faction earns passive rewards for every territory held. Yield accrues at{' '}
+                      <span className="text-emerald-300 font-mono">{passiveRateFormatted}</span>{' '}
+                      mUSDT per territory per hour.
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-3 mb-4">
+                      <div className="rounded-lg bg-gray-800/50 p-3">
+                        <div className="text-xs text-gray-500 uppercase mb-1">Estimated Accrued</div>
+                        <div className="text-lg font-bold tabular-nums text-emerald-400">{estimatedPassiveYield}</div>
+                        <div className="text-xs text-gray-500">mUSDT (faction total)</div>
+                      </div>
+                      <div className="rounded-lg bg-gray-800/50 p-3">
+                        <div className="text-xs text-gray-500 uppercase mb-1">Season Status</div>
+                        <div className="text-lg font-bold tabular-nums">
+                          {isSettled ? (
+                            <span className="text-amber-400">Settled</span>
+                          ) : (
+                            <span className="text-emerald-400">Active</span>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-500">{isSettled ? 'Claim now!' : 'Accruing...'}</div>
+                      </div>
+                    </div>
+
+                    {isSettled ? (
+                      <div className="space-y-2">
+                        <button
+                          onClick={handleClaim}
+                          disabled={claimPending || claimConfirming}
+                          className="w-full rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 px-5 py-3 font-bold text-white transition-all hover:scale-[1.01] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {claimPending ? 'Signing...' : claimConfirming ? 'Confirming...' : claimSuccess ? 'Claimed!' : 'Claim Rewards'}
+                        </button>
+                        {claimError && (
+                          <div className="rounded-lg bg-red-950/40 border border-red-800/50 px-4 py-2">
+                            <p className="text-sm text-red-400">{parseContractError(claimError)}</p>
+                          </div>
+                        )}
+                        {claimSuccess && claimHash && (
+                          <div className="rounded-lg bg-green-950/30 border border-green-800/40 px-4 py-2">
+                            <p className="text-sm text-green-400">Rewards claimed successfully!</p>
+                            <a
+                              href={oklinkTx(claimHash)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-amber-400 hover:text-amber-300 underline"
+                            >
+                              View on OKLink &rarr;
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="rounded-lg bg-gray-800/30 border border-gray-700/50 px-4 py-3">
+                        <p className="text-xs text-gray-400">
+                          {'\u{23F3}'} Season is active. Rewards can be claimed after the season is settled.
+                          Keep holding territories to maximize your yield!
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 

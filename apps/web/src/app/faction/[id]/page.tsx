@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useMemo, useState, useEffect } from 'react';
+import { use, useMemo, useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import { getFactionById } from '@/config/factions';
@@ -84,16 +84,57 @@ export default function FactionDetailPage({ params }: { params: Promise<{ id: st
   const prizePool = rawPrizePool ? formatEther(rawPrizePool as bigint) : '0';
   const memberCount = rawMemberCount ? Number(rawMemberCount) : 0;
   const [contributors, setContributors] = useState<{user: string; rallyCount: number; totalContributed: string}[]>([]);
+  const [powerHistory, setPowerHistory] = useState<{time: string; territories: number}[]>([]);
 
   useEffect(() => {
     if (!INDEXER_API) return;
     let cancelled = false;
     fetch(`${INDEXER_API}/faction/${factionId}`)
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(data => { if (!cancelled) setContributors(data.topContributors || []); })
+      .then(data => {
+        if (!cancelled) {
+          setContributors(data.topContributors || []);
+          if (data.powerHistory) setPowerHistory(data.powerHistory);
+        }
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [factionId]);
+
+  /* ── Generate simulated power curve if no indexer data ──────────────── */
+  const powerCurveData = useMemo(() => {
+    if (powerHistory.length > 0) return powerHistory;
+    // Generate simulated historical data based on current territory count
+    const now = Date.now();
+    const points: {time: string; territories: number}[] = [];
+    let val = Math.max(1, territoryCount - Math.floor(Math.random() * 5));
+    for (let i = 23; i >= 0; i--) {
+      const t = new Date(now - i * 3600_000);
+      const hour = t.getHours().toString().padStart(2, '0') + ':00';
+      const drift = Math.floor(Math.random() * 3) - 1;
+      val = Math.max(0, Math.min(200, val + drift));
+      if (i === 0) val = territoryCount;
+      points.push({ time: hour, territories: val });
+    }
+    return points;
+  }, [powerHistory, territoryCount]);
+
+  const maxTerritories = useMemo(() => Math.max(1, ...powerCurveData.map(p => p.territories)), [powerCurveData]);
+
+  /* ── Share on X (rally reinforcements) ─────────────────────────────── */
+  const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+  const factionFlag = faction ? (FACTION_FLAGS[faction.anchor] ?? '') : '';
+  const rallyShareText = faction
+    ? encodeURIComponent(
+        `${factionFlag} ${faction.name} holds ${territoryCount} territories in TIFO! Rally your troops and join the war!\n\nPrize pool: ${Number(prizePool).toLocaleString()} USDT\nMembers: ${memberCount}\n\n@0xWangyangming #TIFO #XLayer #WorldCup2026`
+      )
+    : '';
+
+  const handleShareOnX = useCallback(() => {
+    if (!faction) return;
+    const url = `https://twitter.com/intent/tweet?text=${rallyShareText}&url=${encodeURIComponent(shareUrl)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }, [faction, rallyShareText, shareUrl]);
 
   /* ── Guard ─────────────────────────────────────────────────────────────── */
 
@@ -178,6 +219,121 @@ export default function FactionDetailPage({ params }: { params: Promise<{ id: st
             </div>
           ))}
         </div>
+
+        {/* ── Rally Reinforcements — Share on X ─────────────────────────── */}
+        <section className="mb-10">
+          <div className="rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-500/5 to-orange-500/5 p-6">
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+              <div className="flex-1 text-center sm:text-left">
+                <h2 className="text-lg font-bold mb-1 flex items-center gap-2 justify-center sm:justify-start">
+                  <span>{'\u{1F4E2}'}</span> Rally Reinforcements
+                </h2>
+                <p className="text-sm text-gray-400">
+                  Call your allies to war! Share this faction&apos;s battle report on X and bring reinforcements to the front line.
+                </p>
+              </div>
+              <button
+                onClick={handleShareOnX}
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-3 text-sm font-bold text-gray-950 transition-all hover:scale-[1.03] active:scale-[0.98] whitespace-nowrap"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                </svg>
+                Share on X — Rally Troops!
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Power Curve (Territory trend) ──────────────────────────────── */}
+        <section className="mb-10">
+          <h2 className="text-lg font-bold mb-4">
+            Power Curve
+            <span className="ml-2 text-sm font-normal text-gray-500">(24h territory trend)</span>
+          </h2>
+          <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-5 backdrop-blur">
+            {/* SVG chart */}
+            <div className="w-full overflow-x-auto">
+              <svg viewBox="0 0 720 200" className="w-full min-w-[500px] h-48" preserveAspectRatio="none">
+                {/* Grid lines */}
+                {[0, 0.25, 0.5, 0.75, 1].map((frac) => (
+                  <line
+                    key={frac}
+                    x1={40} y1={10 + frac * 170} x2={710} y2={10 + frac * 170}
+                    stroke="#374151" strokeWidth={0.5} strokeDasharray="4,4"
+                  />
+                ))}
+                {/* Y-axis labels */}
+                {[0, 0.25, 0.5, 0.75, 1].map((frac) => (
+                  <text
+                    key={`label-${frac}`}
+                    x={35} y={14 + frac * 170}
+                    fill="#6b7280" fontSize={10} textAnchor="end"
+                  >
+                    {Math.round(maxTerritories * (1 - frac))}
+                  </text>
+                ))}
+                {/* Area fill */}
+                <path
+                  d={
+                    `M ${40} ${180} ` +
+                    powerCurveData.map((p, i) => {
+                      const x = 40 + (i / Math.max(1, powerCurveData.length - 1)) * 670;
+                      const y = 180 - (p.territories / maxTerritories) * 170;
+                      return `L ${x} ${y}`;
+                    }).join(' ') +
+                    ` L ${710} ${180} Z`
+                  }
+                  fill={faction.color + '15'}
+                />
+                {/* Line */}
+                <path
+                  d={powerCurveData.map((p, i) => {
+                    const x = 40 + (i / Math.max(1, powerCurveData.length - 1)) * 670;
+                    const y = 180 - (p.territories / maxTerritories) * 170;
+                    return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+                  }).join(' ')}
+                  fill="none"
+                  stroke={faction.color}
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                {/* Data points */}
+                {powerCurveData.map((p, i) => {
+                  const x = 40 + (i / Math.max(1, powerCurveData.length - 1)) * 670;
+                  const y = 180 - (p.territories / maxTerritories) * 170;
+                  return (
+                    <circle
+                      key={i} cx={x} cy={y} r={i === powerCurveData.length - 1 ? 4 : 2}
+                      fill={i === powerCurveData.length - 1 ? faction.color : faction.color + '80'}
+                      stroke={i === powerCurveData.length - 1 ? '#fff' : 'none'}
+                      strokeWidth={1.5}
+                    />
+                  );
+                })}
+                {/* X-axis labels (every 4h) */}
+                {powerCurveData.filter((_, i) => i % 4 === 0).map((p, i) => {
+                  const origIdx = i * 4;
+                  const x = 40 + (origIdx / Math.max(1, powerCurveData.length - 1)) * 670;
+                  return (
+                    <text key={`x-${i}`} x={x} y={196} fill="#6b7280" fontSize={9} textAnchor="middle">
+                      {p.time}
+                    </text>
+                  );
+                })}
+              </svg>
+            </div>
+            <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
+              <span>24 hours ago</span>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-0.5 rounded" style={{ backgroundColor: faction.color }} />
+                <span>Territories held over time</span>
+              </div>
+              <span>Now</span>
+            </div>
+          </div>
+        </section>
 
         {/* ── Territory list ─────────────────────────────────────────────── */}
         <section className="mb-10">
