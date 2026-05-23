@@ -4,10 +4,12 @@ import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import { FACTIONS, FACTION_COUNT, getFactionById, NO_FACTION } from '@/config/factions';
-import { CONTRACTS } from '@/config/contracts';
+import { CONTRACTS, oklinkTx } from '@/config/contracts';
 import { FactionRegistryABI } from '@/config/abi/FactionRegistry';
 import { TerritoryMapABI } from '@/config/abi/TerritoryMap';
+import { MockUSDTABI } from '@/config/abi/MockUSDT';
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { formatEther } from 'viem';
 import { useOkbPrice } from '@/hooks/useOkbPrice';
 
 /* ── Flag map ────────────────────────────────────────────────────────────── */
@@ -20,6 +22,7 @@ function parseContractError(error: Error | null | undefined): string | null {
     AlreadyEnrolled: 'You are already enrolled in a faction',
     InvalidFaction: 'This faction does not exist',
     TransferFailed: 'Token transfer failed',
+    FaucetCooldown: 'Faucet is on cooldown — please wait 12 hours between claims',
   };
   for (const [reason, friendly] of Object.entries(revertMap)) {
     if (msg.includes(reason)) return friendly;
@@ -79,6 +82,36 @@ export default function MePage() {
 
   const { writeContract: defect, data: defectHash, isPending: defectPending, error: defectError, reset: resetDefectError } = useWriteContract();
   const { isLoading: defectConfirming } = useWaitForTransactionReceipt({ hash: defectHash });
+
+  /* ── Faucet tx ────────────────────────────────────────────────────────── */
+
+  const { data: balanceRaw, isLoading: balLoading, refetch: refetchBalance } = useReadContract({
+    address: CONTRACTS.MockUSDT as `0x${string}`,
+    abi: MockUSDTABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    query: { enabled: !!address },
+  });
+  const mUsdtBalance = balanceRaw !== undefined ? Number(formatEther(balanceRaw as bigint)) : undefined;
+
+  const { writeContract: claimFaucet, data: faucetHash, isPending: faucetPending, error: faucetError, reset: resetFaucetError } = useWriteContract();
+  const { isLoading: faucetConfirming, isSuccess: faucetSuccess } = useWaitForTransactionReceipt({ hash: faucetHash });
+
+  const handleFaucet = () => {
+    resetFaucetError();
+    claimFaucet({
+      address: CONTRACTS.MockUSDT as `0x${string}`,
+      abi: MockUSDTABI,
+      functionName: 'faucet',
+      args: [],
+    });
+  };
+
+  // Refetch balance after faucet success
+  useMemo(() => {
+    if (faucetSuccess) refetchBalance();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [faucetSuccess]);
 
   /* ── Derived ───────────────────────────────────────────────────────────── */
 
@@ -156,6 +189,53 @@ export default function MePage() {
         <p className="text-gray-500 text-sm font-mono mb-8">
           {address?.slice(0, 6)}...{address?.slice(-4)}
         </p>
+
+        {/* ── FAUCET CARD ───────────────────────────────────────────────── */}
+        <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-5 mb-8 backdrop-blur">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-base font-bold flex items-center gap-2">
+                {'\u{1F6B0}'} Get Test Tokens
+              </h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                1,000 mUSDT per claim &middot; 12h cooldown
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="text-sm font-mono text-gray-300">
+                {balLoading ? '...' : mUsdtBalance !== undefined ? Math.floor(mUsdtBalance).toLocaleString() : '0'}
+              </div>
+              <div className="text-xs text-gray-500">mUSDT Balance</div>
+            </div>
+          </div>
+
+          <button
+            onClick={handleFaucet}
+            disabled={faucetPending || faucetConfirming}
+            className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-5 py-3 font-bold text-white transition-all hover:scale-[1.01] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {faucetPending ? 'Signing...' : faucetConfirming ? 'Confirming...' : faucetSuccess ? 'Claimed!' : 'Claim 1,000 mUSDT'}
+          </button>
+
+          {faucetError && (
+            <div className="mt-2 rounded-lg bg-red-950/40 border border-red-800/50 px-4 py-2">
+              <p className="text-sm text-red-400">{parseContractError(faucetError)}</p>
+            </div>
+          )}
+          {faucetSuccess && faucetHash && (
+            <div className="mt-2 rounded-lg bg-green-950/30 border border-green-800/40 px-4 py-2">
+              <p className="text-sm text-green-400">1,000 mUSDT claimed!</p>
+              <a
+                href={oklinkTx(faucetHash)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-amber-400 hover:text-amber-300 underline"
+              >
+                View on OKLink &rarr;
+              </a>
+            </div>
+          )}
+        </div>
 
         {/* ── LOADING ────────────────────────────────────────────────────── */}
         {enrollLoading ? (

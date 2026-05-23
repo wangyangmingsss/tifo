@@ -272,6 +272,20 @@ export default function RallyPage({ params }: { params: { regionId: string } }) 
 
   const isDefending = userFactionId !== undefined && Number(userFactionId) === ownerFactionId && ownerFactionId !== NO_FACTION;
 
+  // -- faucet hooks --
+  const { writeContract: doFaucet, data: faucetTxHash, isPending: faucetPending, error: faucetError, reset: resetFaucet } = useWriteContract();
+  const { isLoading: faucetConfirming, isSuccess: faucetSuccess } = useWaitForTransactionReceipt({ hash: faucetTxHash });
+
+  const handleFaucet = () => {
+    resetFaucet();
+    doFaucet({
+      address: CONTRACTS.MockUSDT as `0x${string}`,
+      abi: MockUSDTABI,
+      functionName: 'faucet',
+      args: [],
+    });
+  };
+
   // -- defect hooks --
   const { writeContract: doDefect, data: defectTxHash, isPending: defectPending, error: defectError, reset: resetDefect } = useWriteContract();
   const { isLoading: defectConfirming, isSuccess: defectSuccess } = useWaitForTransactionReceipt({ hash: defectTxHash });
@@ -420,7 +434,33 @@ export default function RallyPage({ params }: { params: { regionId: string } }) 
               </div>
 
               {maxAmount === 0 && !balLoading && (
-                <p className="mt-2 text-xs text-red-400">Your mUSDT balance is zero. Use the faucet first.</p>
+                <div className="mt-3 rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-4">
+                  <p className="text-xs text-gray-400 mb-2">Your mUSDT balance is zero. Claim free test tokens to start rallying.</p>
+                  <button
+                    onClick={handleFaucet}
+                    disabled={faucetPending || faucetConfirming}
+                    className="w-full rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 px-4 py-2 text-sm font-bold text-white transition-all hover:scale-[1.01] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {faucetPending ? 'Signing...' : faucetConfirming ? 'Confirming...' : faucetSuccess ? 'Claimed! Refresh balance...' : 'Claim 1,000 mUSDT'}
+                  </button>
+                  {faucetError && (
+                    <p className="mt-1 text-xs text-red-400">
+                      {faucetError.message?.includes('FaucetCooldown')
+                        ? 'Faucet is on cooldown — please wait 12 hours between claims'
+                        : 'Faucet claim failed'}
+                    </p>
+                  )}
+                  {faucetSuccess && faucetTxHash && (
+                    <a
+                      href={oklinkTx(faucetTxHash)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 inline-block text-xs text-amber-400 hover:text-amber-300 underline"
+                    >
+                      View on OKLink &rarr;
+                    </a>
+                  )}
+                </div>
               )}
             </div>
 

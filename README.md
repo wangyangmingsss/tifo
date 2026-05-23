@@ -232,9 +232,9 @@ This ensures users discover the defection mechanic regardless of which page they
 |-------|------|-------------|
 | `/` | Landing Page | Hero with animated world map preview, live stats counter, how-it-works guide |
 | `/map` | Territory Map | Full-screen D3-geo world map colored by faction ownership. Click any region for details + rally button + **defection entry** |
-| `/rally/[regionId]` | Rally Panel | Slider to select commit amount, real-time underdog bonus preview, power change prediction, wagmi `rally()` transaction with approve flow, **defection panel with faction-switch prompt** |
+| `/rally/[regionId]` | Rally Panel | Slider to select commit amount, real-time underdog bonus preview, power change prediction, wagmi `rally()` transaction with approve flow, **inline faucet button** when balance is zero, **defection panel with faction-switch prompt** |
 | `/faction/[id]` | Faction Details | Territory count, WarChest prize pool, member count, owned regions list, top contributors |
-| `/me` | My War Record | Faction enrollment (join/switch), contribution stats, defection opportunities, share on X |
+| `/me` | My War Record | **Faucet card** (claim 1,000 mUSDT with cooldown indicator + OKLink tx link), faction enrollment (join/switch), contribution stats, defection opportunities, share on X |
 | `/leaderboard` | Faction Leaderboard | 48 factions ranked by territory count, gold/silver/bronze top-3 styling |
 
 ### Dynamic OG Images (Social Sharing)
@@ -486,7 +486,7 @@ All contracts are deployed and **source-verified** on OKLink.
 
 1. **Connect** OKX Wallet on X Layer Testnet
 2. **Pick a faction** -- choose your nation (first join is free)
-3. **Mint** testnet MockUSDT from the faucet
+3. **Mint** testnet MockUSDT from the faucet (available on `/me` page and inline on rally page when balance is zero)
 4. **Rally** -- tap a region on the map, commit tokens, and push your faction's power
 5. **Watch** the map shift in real time as your faction gains (or loses) ground
 6. **Defect** -- if your region gets captured, betray your old faction for a finder's reward
