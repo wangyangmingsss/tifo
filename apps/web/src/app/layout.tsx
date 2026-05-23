@@ -1,35 +1,28 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
-import Web3Provider from "@/providers/Web3Provider";
-import { ToastProvider } from "@/components/Toast";
+import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
+import './globals.css';
+import { Providers } from './providers';
+import { Navbar } from '@/components/Navbar';
 
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-});
+const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: "TIFO | World Cup Territory War",
-  description:
-    "48 factions battle for territory on a real world map. Every rally, capture, and defection is a verifiable transaction on X Layer.",
-  other: {
-    "viewport": "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover",
-    "theme-color": "#030712",
-    "apple-mobile-web-app-capable": "yes",
-    "apple-mobile-web-app-status-bar-style": "black-translucent",
-  },
+  title: 'TIFO - 2026 World Cup On-Chain Territory War',
+  description: '48 factions battle for territory on a real world map. Rally, defect, conquer. Every move is an on-chain transaction on X Layer.',
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
-    <html lang="en">
-      <body className={`${inter.variable} font-sans bg-gray-950 text-white antialiased`}>
-        <Web3Provider><ToastProvider>{children}</ToastProvider></Web3Provider>
+    <html lang="en" className="dark">
+      <body className={`${inter.className} bg-gray-950 text-white min-h-screen`}>
+        <Providers>
+          <Navbar />
+          <main>{children}</main>
+        </Providers>
       </body>
     </html>
   );

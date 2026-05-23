@@ -1,96 +1,128 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { WorldMap } from '@/components/WorldMap';
+import { RegionSidebar } from '@/components/RegionSidebar';
+import { fetchMapState } from '@/lib/api';
+import { NO_FACTION } from '@/lib/factions';
+import { CONTRACTS } from '@/lib/contracts';
+import { TerritoryMapABI } from '@/lib/abi';
 import { useReadContract } from 'wagmi';
-import Navbar from '@/components/Navbar';
-import WorldMap, { generateMockMapState } from '@/components/WorldMap';
-import RegionSidebar from '@/components/RegionSidebar';
-import MapLegend from '@/components/MapLegend';
-import { NO_FACTION } from '@/config/factions';
-import { CONTRACTS } from '@/config/contracts';
-import { TerritoryMapABI } from '@/config/abi/TerritoryMap';
-import { regionIdToCountry } from '@/config/regionMapping';
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+
+interface MapRegion {
+  regionId: number;
+  ownerFaction: number;
+  captureCount: number;
+}
+
+interface MapStateResponse {
+  regionCount: number;
+  regions: MapRegion[];
+}
+
+/* ------------------------------------------------------------------ */
+/*  Page Component                                                     */
+/* ------------------------------------------------------------------ */
 
 export default function MapPage() {
-  const [selectedRegionId, setSelectedRegionId] = useState<number | null>(null);
-  const [selectedCountryId, setSelectedCountryId] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  /* Map ownership state */
+  const [mapOwners, setMapOwners] = useState<number[]>(() => new Array(200).fill(NO_FACTION));
 
-  // Poll on-chain getMapState() every 15 seconds for real-time map rendering
-  const { data: onChainMapState, isError } = useReadContract({
+  /* Sidebar state */
+  const [selectedRegion, setSelectedRegion] = useState<number | null>(null);
+
+  /* ── On-chain fallback via wagmi ── */
+  const { data: onChainState } = useReadContract({
     address: CONTRACTS.TerritoryMap,
     abi: TerritoryMapABI,
     functionName: 'getMapState',
-    query: {
-      refetchInterval: 15_000,
-    },
   });
 
-  // Convert uint8[] (regionId → factionId) to Record<countryNumericId, factionId>
-  const mapState = useMemo(() => {
-    if (!onChainMapState || isError) {
-      // Fallback to mock data if chain read fails
-      return generateMockMapState();
-    }
-    const state: Record<string, number> = {};
-    const owners = onChainMapState as number[];
-    for (let regionId = 0; regionId < owners.length; regionId++) {
-      const countryId = regionIdToCountry[regionId];
-      if (countryId && owners[regionId] !== NO_FACTION) {
-        state[countryId] = owners[regionId];
+  /* ── API polling (primary source) ── */
+  const loadMapFromAPI = useCallback(async () => {
+    try {
+      const data: MapStateResponse | null = await fetchMapState();
+      if (data && data.regions) {
+        const owners = new Array(200).fill(NO_FACTION);
+        data.regions.forEach((r) => {
+          if (r.regionId >= 0 && r.regionId < 200) {
+            owners[r.regionId] = r.ownerFaction ?? NO_FACTION;
+          }
+        });
+        setMapOwners(owners);
+        return true;
       }
-    }
-    return state;
-  }, [onChainMapState, isError]);
+    } catch { /* silent */ }
+    return false;
+  }, []);
 
-  // Compute territory counts for legend
-  const territoryCounts = useMemo(() => {
-    const counts: Record<number, number> = {};
-    for (const factionId of Object.values(mapState)) {
-      if (factionId !== NO_FACTION) {
-        counts[factionId] = (counts[factionId] ?? 0) + 1;
+  /* Initial load + 15s polling */
+  useEffect(() => {
+    loadMapFromAPI();
+    const interval = setInterval(loadMapFromAPI, 15_000);
+    return () => clearInterval(interval);
+  }, [loadMapFromAPI]);
+
+  /* Apply on-chain data as fallback when API has not populated owners */
+  useEffect(() => {
+    if (!onChainState) return;
+    const chainData = onChainState as number[];
+    if (!chainData.length) return;
+
+    setMapOwners((prev) => {
+      // Only use chain data for regions still at NO_FACTION in our state
+      const merged = [...prev];
+      let changed = false;
+      for (let i = 0; i < chainData.length && i < 200; i++) {
+        const chainOwner = Number(chainData[i]);
+        if (prev[i] === NO_FACTION && chainOwner !== NO_FACTION) {
+          merged[i] = chainOwner;
+          changed = true;
+        }
       }
-    }
-    return counts;
-  }, [mapState]);
+      return changed ? merged : prev;
+    });
+  }, [onChainState]);
 
-  const handleSelectRegion = useCallback((regionId: number, countryId: string) => {
-    setSelectedRegionId(regionId);
-    setSelectedCountryId(countryId);
-    setSidebarOpen(true);
+  /* ── Region click handler ── */
+  const handleRegionClick = useCallback((regionId: number) => {
+    setSelectedRegion(regionId);
   }, []);
 
   const handleCloseSidebar = useCallback(() => {
-    setSidebarOpen(false);
-    // Delay clearing selection so slide-out animation can play
-    setTimeout(() => {
-      setSelectedRegionId(null);
-      setSelectedCountryId(null);
-    }, 300);
+    setSelectedRegion(null);
   }, []);
 
-  // Get owner faction for selected region
-  const ownerFactionId = selectedCountryId ? (mapState[selectedCountryId] ?? NO_FACTION) : NO_FACTION;
+  /* ── Render ── */
+  const ownerFactionId = selectedRegion !== null ? (mapOwners[selectedRegion] ?? NO_FACTION) : NO_FACTION;
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-[#0a0a1a]">
-      <Navbar />
+    <div className="relative" style={{ height: 'calc(100vh - 64px)', marginTop: 64 }}>
+      {/* Background grain */}
+      <div className="pointer-events-none fixed inset-0 z-0 bg-gray-950" />
 
-      {/* Map area - below the fixed navbar (h-14 = 56px) */}
-      <div className="flex-1 relative mt-14">
-        <WorldMap mapState={mapState} onSelectRegion={handleSelectRegion} />
-
-        <MapLegend territoryCounts={territoryCounts} />
-
-        {/* Sidebar */}
-        {sidebarOpen && selectedRegionId !== null && (
-          <RegionSidebar
-            regionId={selectedRegionId}
-            ownerFactionId={ownerFactionId}
-            onClose={handleCloseSidebar}
-          />
-        )}
+      {/* Full-screen map */}
+      <div className="relative z-10 h-full flex items-center justify-center bg-[#0a0f1e]">
+        <WorldMap
+          mapState={mapOwners}
+          onRegionClick={handleRegionClick}
+          className="w-full h-full"
+        />
       </div>
+
+      {/* Region detail sidebar */}
+      {selectedRegion !== null && (
+        <RegionSidebar
+          regionId={selectedRegion}
+          ownerFactionId={ownerFactionId}
+          isOpen={selectedRegion !== null}
+          onClose={handleCloseSidebar}
+        />
+      )}
     </div>
   );
 }

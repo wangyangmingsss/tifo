@@ -1,174 +1,255 @@
 'use client';
 
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import Navbar from '@/components/Navbar';
-import { FACTIONS, FACTION_COUNT } from '@/config/factions';
-import { CONTRACTS } from '@/config/contracts';
-import { TerritoryMapABI } from '@/config/abi/TerritoryMap';
 import { useReadContract } from 'wagmi';
-import { useMemo } from 'react';
+import { CONTRACTS } from '@/lib/contracts';
+import { TerritoryMapABI } from '@/lib/abi';
+import { getFaction } from '@/lib/factions';
+import { fetchLeaderboard } from '@/lib/api';
 
-/* ── Faction flag lookup ─────────────────────────────────────────────────── */
+type SortKey = 'territories' | 'rallies' | 'supporters' | 'captures';
 
-const FACTION_FLAGS: Record<string, string> = {
-  AR: '\u{1F1E6}\u{1F1F7}', BR: '\u{1F1E7}\u{1F1F7}', UY: '\u{1F1FA}\u{1F1FE}', CO: '\u{1F1E8}\u{1F1F4}', EC: '\u{1F1EA}\u{1F1E8}', PY: '\u{1F1F5}\u{1F1FE}',
-  FR: '\u{1F1EB}\u{1F1F7}', ES: '\u{1F1EA}\u{1F1F8}', GB: '\u{1F1EC}\u{1F1E7}', DE: '\u{1F1E9}\u{1F1EA}', PT: '\u{1F1F5}\u{1F1F9}', NL: '\u{1F1F3}\u{1F1F1}',
-  HR: '\u{1F1ED}\u{1F1F7}', BE: '\u{1F1E7}\u{1F1EA}', IT: '\u{1F1EE}\u{1F1F9}', CH: '\u{1F1E8}\u{1F1ED}', AT: '\u{1F1E6}\u{1F1F9}', NO: '\u{1F1F3}\u{1F1F4}',
-  PL: '\u{1F1F5}\u{1F1F1}', CZ: '\u{1F1E8}\u{1F1FF}', US: '\u{1F1FA}\u{1F1F8}', MX: '\u{1F1F2}\u{1F1FD}', CA: '\u{1F1E8}\u{1F1E6}', PA: '\u{1F1F5}\u{1F1E6}',
-  HT: '\u{1F1ED}\u{1F1F9}', MA: '\u{1F1F2}\u{1F1E6}', SN: '\u{1F1F8}\u{1F1F3}', GH: '\u{1F1EC}\u{1F1ED}', ZA: '\u{1F1FF}\u{1F1E6}', CI: '\u{1F1E8}\u{1F1EE}',
-  NG: '\u{1F1F3}\u{1F1EC}', DZ: '\u{1F1E9}\u{1F1FF}', EG: '\u{1F1EA}\u{1F1EC}', CV: '\u{1F1E8}\u{1F1FB}', CD: '\u{1F1E8}\u{1F1E9}', JP: '\u{1F1EF}\u{1F1F5}',
-  KR: '\u{1F1F0}\u{1F1F7}', AU: '\u{1F1E6}\u{1F1FA}', SA: '\u{1F1F8}\u{1F1E6}', IR: '\u{1F1EE}\u{1F1F7}', QA: '\u{1F1F6}\u{1F1E6}', UZ: '\u{1F1FA}\u{1F1FF}',
-  JO: '\u{1F1EF}\u{1F1F4}', IQ: '\u{1F1EE}\u{1F1F6}', NZ: '\u{1F1F3}\u{1F1FF}', JM: '\u{1F1EF}\u{1F1F2}', TR: '\u{1F1F9}\u{1F1F7}', TN: '\u{1F1F9}\u{1F1F3}',
-};
-
-/* ── Rank badge helpers ──────────────────────────────────────────────────── */
-
-const RANK_STYLES: Record<number, string> = {
-  1: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40',
-  2: 'bg-gray-300/20 text-gray-300 border-gray-400/40',
-  3: 'bg-amber-700/20 text-amber-500 border-amber-600/40',
-};
-
-const RANK_LABELS: Record<number, string> = { 1: '\u{1F947}', 2: '\u{1F948}', 3: '\u{1F949}' };
-
-/* ── Page ─────────────────────────────────────────────────────────────────── */
+interface LeaderboardEntry {
+  factionId: number;
+  territoriesHeld: number;
+  totalRallies: number;
+  uniqueSupporters: number;
+  capturesWon: number;
+}
 
 export default function LeaderboardPage() {
-  /* ── On-chain data ─────────────────────────────────────────────────────── */
+  const [data, setData] = useState<LeaderboardEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('territories');
+  const [sortAsc, setSortAsc] = useState(false);
 
-  const { data: rawCounts, isLoading } = useReadContract({
-    address: CONTRACTS.TerritoryMap as `0x${string}`,
+  // On-chain territory counts as supplement
+  const { data: territoryCounts } = useReadContract({
+    address: CONTRACTS.TerritoryMap,
     abi: TerritoryMapABI,
     functionName: 'territoryCounts',
   });
 
-  /* ── Derived ranking ───────────────────────────────────────────────────── */
+  const loadData = useCallback(async () => {
+    try {
+      const res = await fetchLeaderboard();
+      if (res && Array.isArray(res)) {
+        setData(res);
+      }
+    } catch { /* silent */ }
+    setLoading(false);
+  }, []);
 
-  const ranked = useMemo(() => {
-    const counts: bigint[] = (rawCounts as bigint[] | undefined) ?? [];
-    return FACTIONS.map((f) => ({
-      ...f,
-      territories: f.id < counts.length ? Number(counts[f.id]) : 0,
-    }))
-      .sort((a, b) => b.territories - a.territories || a.id - b.id);
-  }, [rawCounts]);
+  useEffect(() => {
+    loadData();
+    const interval = setInterval(loadData, 30_000);
+    return () => clearInterval(interval);
+  }, [loadData]);
 
-  const totalContested = useMemo(
-    () => ranked.reduce((s, f) => s + f.territories, 0),
-    [ranked],
+  // Merge on-chain territory counts if available
+  const enrichedData = useMemo(() => {
+    if (!territoryCounts) return data;
+    const counts = territoryCounts as bigint[];
+    return data.map((entry) => ({
+      ...entry,
+      territoriesHeld: counts[entry.factionId]
+        ? Number(counts[entry.factionId])
+        : entry.territoriesHeld,
+    }));
+  }, [data, territoryCounts]);
+
+  // Filter
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return enrichedData;
+    return enrichedData.filter((entry) => {
+      const faction = getFaction(entry.factionId);
+      if (!faction) return false;
+      return (
+        faction.name.toLowerCase().includes(q) ||
+        faction.nameZh.includes(q) ||
+        faction.code.toLowerCase().includes(q)
+      );
+    });
+  }, [enrichedData, search]);
+
+  // Sort
+  const sorted = useMemo(() => {
+    const keyMap: Record<SortKey, keyof LeaderboardEntry> = {
+      territories: 'territoriesHeld',
+      rallies: 'totalRallies',
+      supporters: 'uniqueSupporters',
+      captures: 'capturesWon',
+    };
+    const field = keyMap[sortKey];
+    return [...filtered].sort((a, b) => {
+      const diff = (a[field] ?? 0) - (b[field] ?? 0);
+      return sortAsc ? diff : -diff;
+    });
+  }, [filtered, sortKey, sortAsc]);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortKey(key);
+      setSortAsc(false);
+    }
+  };
+
+  const SortIcon = ({ active, asc }: { active: boolean; asc: boolean }) => (
+    <svg
+      className={`w-3 h-3 inline ml-1 ${active ? 'text-amber-400' : 'text-gray-600'}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      viewBox="0 0 24 24"
+    >
+      {asc ? (
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+      ) : (
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+      )}
+    </svg>
   );
 
-  /* ── UI ─────────────────────────────────────────────────────────────────── */
+  const rankStyle = (rank: number) => {
+    if (rank === 1) return 'text-amber-400 font-black';
+    if (rank === 2) return 'text-gray-300 font-bold';
+    if (rank === 3) return 'text-amber-600 font-bold';
+    return 'text-gray-500 font-medium';
+  };
+
+  const rankBadge = (rank: number) => {
+    if (rank === 1) return 'border-amber-500/40 bg-amber-500/5';
+    if (rank === 2) return 'border-gray-400/30 bg-gray-400/5';
+    if (rank === 3) return 'border-amber-700/30 bg-amber-700/5';
+    return 'border-gray-800/60 bg-gray-900/40';
+  };
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      <Navbar />
-
-      <main className="pt-24 pb-16 px-4 max-w-5xl mx-auto">
+    <div className="min-h-screen pt-24 pb-16 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="text-center mb-10">
-          <h1 className="text-4xl sm:text-5xl font-black tracking-tight bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
-            Faction Leaderboard
+          <h1 className="text-3xl sm:text-4xl font-black text-white mb-2">
+            Faction <span className="text-amber-400">Leaderboard</span>
           </h1>
-          <p className="mt-3 text-gray-400 text-sm">
-            {FACTION_COUNT} factions competing &middot;{' '}
-            <span className="text-white font-semibold">{totalContested}</span> regions contested
+          <p className="text-gray-500 text-sm max-w-md mx-auto">
+            48 nations ranked by territorial dominance. Updated every 30 seconds.
           </p>
         </div>
 
-        {isLoading ? (
-          <div className="flex items-center justify-center py-32">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
+        {/* Search */}
+        <div className="max-w-md mx-auto mb-8">
+          <div className="relative">
+            <svg
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+            </svg>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search faction..."
+              className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-gray-800 bg-gray-900/60 text-gray-200 placeholder-gray-600 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-colors"
+            />
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="text-center py-20">
+            <div className="inline-block w-8 h-8 border-2 border-gray-700 border-t-amber-400 rounded-full animate-spin" />
+            <p className="mt-4 text-sm text-gray-500">Loading leaderboard...</p>
           </div>
         ) : (
           <>
-            {/* ── Desktop table ──────────────────────────────────────────── */}
-            <div className="hidden md:block overflow-x-auto rounded-xl border border-gray-800 bg-gray-900/50 backdrop-blur">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-800 text-gray-500 text-xs uppercase tracking-wider">
-                    <th className="px-4 py-3 text-left w-16">Rank</th>
-                    <th className="px-4 py-3 text-left w-12">Flag</th>
-                    <th className="px-4 py-3 text-left">Faction</th>
-                    <th className="px-4 py-3 text-left w-20">Code</th>
-                    <th className="px-4 py-3 text-left w-28">Conf.</th>
-                    <th className="px-4 py-3 text-right w-28">Territories</th>
-                    <th className="px-4 py-3 w-10" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {ranked.map((f, i) => {
-                    const rank = i + 1;
-                    const isTop3 = rank <= 3;
-                    return (
-                      <tr
-                        key={f.id}
-                        className={`border-b border-gray-800/50 transition-colors hover:bg-gray-800/40 ${isTop3 ? 'bg-gray-900/80' : ''}`}
-                      >
-                        <td className="px-4 py-3">
-                          {isTop3 ? (
-                            <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full border text-sm font-bold ${RANK_STYLES[rank]}`}>
-                              {RANK_LABELS[rank]}
-                            </span>
-                          ) : (
-                            <span className="text-gray-500 font-mono">{rank}</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-2xl">
-                          {FACTION_FLAGS[f.anchor] ?? ''}
-                        </td>
-                        <td className="px-4 py-3">
-                          <Link href={`/faction/${f.id}`} className="font-semibold text-white hover:text-amber-400 transition-colors">
-                            {f.name}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-3 font-mono text-gray-400">{f.code}</td>
-                        <td className="px-4 py-3 text-gray-400">{f.confederation}</td>
-                        <td className="px-4 py-3 text-right font-bold tabular-nums">{f.territories}</td>
-                        <td className="px-4 py-3">
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: f.color }} />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            {/* Table header */}
+            <div className="hidden sm:grid sm:grid-cols-[4rem_1fr_7rem_6rem_6rem_6rem] gap-2 px-4 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 border-b border-gray-800/60 mb-2">
+              <div>Rank</div>
+              <div>Faction</div>
+              <button onClick={() => handleSort('territories')} className="text-left hover:text-amber-400 transition-colors">
+                Territories <SortIcon active={sortKey === 'territories'} asc={sortAsc} />
+              </button>
+              <button onClick={() => handleSort('rallies')} className="text-left hover:text-amber-400 transition-colors">
+                Rallies <SortIcon active={sortKey === 'rallies'} asc={sortAsc} />
+              </button>
+              <button onClick={() => handleSort('supporters')} className="text-left hover:text-amber-400 transition-colors">
+                Supporters <SortIcon active={sortKey === 'supporters'} asc={sortAsc} />
+              </button>
+              <button onClick={() => handleSort('captures')} className="text-left hover:text-amber-400 transition-colors">
+                Captures <SortIcon active={sortKey === 'captures'} asc={sortAsc} />
+              </button>
             </div>
 
-            {/* ── Mobile card view ───────────────────────────────────────── */}
-            <div className="md:hidden flex flex-col gap-3">
-              {ranked.map((f, i) => {
-                const rank = i + 1;
-                const isTop3 = rank <= 3;
+            {/* Rows */}
+            <div className="space-y-2">
+              {sorted.map((entry, idx) => {
+                const faction = getFaction(entry.factionId);
+                if (!faction) return null;
+                const rank = idx + 1;
+
                 return (
                   <Link
-                    key={f.id}
-                    href={`/faction/${f.id}`}
-                    className={`flex items-center gap-3 rounded-xl border p-4 transition-colors hover:border-gray-600 ${
-                      isTop3
-                        ? 'border-amber-500/30 bg-gray-900/80'
-                        : 'border-gray-800 bg-gray-900/40'
-                    }`}
+                    key={entry.factionId}
+                    href={`/faction/${entry.factionId}`}
+                    className={`group grid grid-cols-[3rem_1fr] sm:grid-cols-[4rem_1fr_7rem_6rem_6rem_6rem] gap-2 items-center px-4 py-3.5 rounded-xl border ${rankBadge(rank)} hover:border-amber-500/30 transition-all duration-200`}
                   >
-                    <span className="w-8 text-center font-bold text-sm text-gray-400">
-                      {isTop3 ? RANK_LABELS[rank] : rank}
+                    {/* Rank */}
+                    <span className={`text-lg tabular-nums ${rankStyle(rank)}`}>
+                      {rank === 1 ? '\uD83E\uDD47' : rank === 2 ? '\uD83E\uDD48' : rank === 3 ? '\uD83E\uDD49' : `#${rank}`}
                     </span>
-                    <span className="text-2xl">{FACTION_FLAGS[f.anchor] ?? ''}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-white truncate">{f.name}</span>
-                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: f.color }} />
+
+                    {/* Faction */}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-2xl flex-shrink-0">{faction.flag}</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-white truncate group-hover:text-amber-400 transition-colors">
+                          {faction.name}
+                        </p>
+                        <p className="text-[10px] text-gray-500 sm:hidden">
+                          {entry.territoriesHeld} territories
+                        </p>
                       </div>
-                      <span className="text-xs text-gray-500">{f.code} &middot; {f.confederation}</span>
+                      <div
+                        className="hidden sm:block w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: faction.color }}
+                      />
                     </div>
-                    <span className="font-bold text-lg tabular-nums">{f.territories}</span>
+
+                    {/* Stats (hidden on mobile, shown on sm+) */}
+                    <span className="hidden sm:block text-sm font-mono tabular-nums text-gray-300 font-semibold">
+                      {entry.territoriesHeld}
+                    </span>
+                    <span className="hidden sm:block text-sm font-mono tabular-nums text-gray-400">
+                      {entry.totalRallies.toLocaleString()}
+                    </span>
+                    <span className="hidden sm:block text-sm font-mono tabular-nums text-gray-400">
+                      {entry.uniqueSupporters.toLocaleString()}
+                    </span>
+                    <span className="hidden sm:block text-sm font-mono tabular-nums text-gray-400">
+                      {entry.capturesWon.toLocaleString()}
+                    </span>
                   </Link>
                 );
               })}
             </div>
+
+            {sorted.length === 0 && (
+              <div className="text-center py-16">
+                <p className="text-gray-500 text-sm">No factions match your search.</p>
+              </div>
+            )}
           </>
         )}
-      </main>
+      </div>
     </div>
   );
 }

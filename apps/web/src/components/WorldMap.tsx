@@ -1,309 +1,344 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useState } from 'react';
-import * as d3 from 'd3';
-import * as topojson from 'topojson-client';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { geoNaturalEarth1, geoPath } from 'd3-geo';
+import { feature } from 'topojson-client';
 import type { Topology, GeometryCollection } from 'topojson-specification';
-import { NO_FACTION, getFactionById } from '@/config/factions';
-import { countryToRegionId, getCountryName } from '@/config/regionMapping';
+import type { FeatureCollection, Feature, Geometry } from 'geojson';
+import { FACTIONS, NO_FACTION } from '@/lib/factions';
 
-// ── Types ──────────────────────────────────────────────────────────────────────
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
 
 interface WorldMapProps {
-  mapState: Record<string, number>; // countryNumericId -> factionId
-  onSelectRegion: (regionId: number, countryId: string) => void;
+  mapState: number[];
+  onRegionClick: (regionId: number) => void;
+  className?: string;
+  mini?: boolean;
 }
 
-interface CountryFeature {
-  id: string;
-  properties: { name: string };
-  type: 'Feature';
-  geometry: GeoJSON.Geometry;
+interface CountryProperties {
+  name: string;
 }
 
-// ── Mock map state generator ───────────────────────────────────────────────────
-// PLACEHOLDER: generateMockMapState
-// PLACEHOLDER: faction color resolver
-// PLACEHOLDER: tooltip logic
-// PLACEHOLDER: main component
+type CountryFeature = Feature<Geometry, CountryProperties> & { id: string };
 
-export function generateMockMapState(): Record<string, number> {
-  const state: Record<string, number> = {};
+/* ------------------------------------------------------------------ */
+/*  Faction anchor ISO-alpha2 -> ISO-numeric mapping                   */
+/* ------------------------------------------------------------------ */
 
-  // Geographic clustering: factions own regions near their anchor
-  const clusters: Record<number, string[]> = {
-    0:  ['032','152','068','600','858','238'], // ARG -> South America south
-    1:  ['076','740','328','862'],              // BRA -> Brazil + neighbors
-    3:  ['170','218','591','188'],              // COL
-    6:  ['250','442','056','756'],              // FRA -> Western Europe
-    7:  ['724','620','010'],                    // ESP + POR
-    8:  ['826','372'],                          // ENG -> UK + Ireland
-    9:  ['276','040','203','756'],              // GER -> Central Europe (CHE shared)
-    11: ['528','208'],                          // NED -> Benelux + Denmark
-    14: ['380','300','196'],                    // ITA -> Med
-    20: ['840','124'],                          // USA + CAN
-    21: ['484','320','340','222'],              // MEX -> Central America
-    25: ['504','732','478'],                    // MAR -> North Africa west
-    30: ['566','288','384','768','204'],        // NGA -> West Africa
-    31: ['012','788','434'],                    // ALG -> North Africa
-    32: ['818','729','728'],                    // EGY -> NE Africa
-    35: ['392','410','408'],                    // JPN + Korea
-    36: ['410'],                                // KOR (already in JPN cluster, skip dupe)
-    37: ['036','554','598','540'],              // AUS -> Oceania
-    38: ['682','512','784','414'],              // KSA -> Gulf
-    39: ['364','004','586'],                    // IRN -> West Asia
-    46: ['792','268'],                          // TUR -> Turkey + Georgia
-    28: ['710','072','516','748','426'],        // RSA -> Southern Africa
-    34: ['180','120','108','178'],              // COD -> Central Africa
-    43: ['368','760','400','422'],              // IRQ -> Levant
-  };
+const ANCHOR_ISO_NUMERIC: Record<number, string> = {
+  0: '032',  1: '076',  2: '858',  3: '170',  4: '218',  5: '600',
+  6: '250',  7: '724',  8: '826',  9: '276', 10: '620', 11: '528',
+  12: '191', 13: '056', 14: '380', 15: '756', 16: '040', 17: '578',
+  18: '616', 19: '203', 20: '840', 21: '484', 22: '124', 23: '591',
+  24: '332', 25: '504', 26: '686', 27: '288', 28: '710', 29: '384',
+  30: '566', 31: '012', 32: '818', 33: '132', 34: '180',
+  35: '392', 36: '410', 37: '036', 38: '682', 39: '364',
+  40: '634', 41: '860', 42: '400', 43: '368', 44: '554',
+  45: '388', 46: '792', 47: '788',
+};
 
-  for (const [factionIdStr, countries] of Object.entries(clusters)) {
-    const factionId = Number(factionIdStr);
-    for (const cid of countries) {
-      state[cid] = factionId;
+/** Reverse: ISO-numeric string -> regionId for faction anchors */
+const ANCHOR_NUMERIC_TO_REGION: Map<string, number> = new Map(
+  Object.entries(ANCHOR_ISO_NUMERIC).map(([regionId, isoNum]) => [isoNum, Number(regionId)])
+);
+
+/* ------------------------------------------------------------------ */
+/*  Build region mapping from TopoJSON countries                       */
+/* ------------------------------------------------------------------ */
+
+function buildCountryToRegionMap(countries: CountryFeature[]): Map<string, number> {
+  const map = new Map<string, number>();
+  let nextRegionId = 48;
+
+  // First pass: assign anchor countries to their fixed region IDs
+  for (const country of countries) {
+    const isoNum = country.id;
+    const regionId = ANCHOR_NUMERIC_TO_REGION.get(isoNum);
+    if (regionId !== undefined) {
+      map.set(isoNum, regionId);
     }
   }
 
-  return state;
+  // Second pass: assign remaining countries region IDs 48+
+  for (const country of countries) {
+    const isoNum = country.id;
+    if (!map.has(isoNum) && nextRegionId < 200) {
+      map.set(isoNum, nextRegionId);
+      nextRegionId++;
+    }
+  }
+
+  return map;
 }
 
-function getColorForCountry(countryId: string, mapState: Record<string, number>): string {
-  const factionId = mapState[countryId];
-  if (factionId === undefined || factionId === NO_FACTION) return '#1a1a2e';
-  const faction = getFactionById(factionId);
-  if (!faction) return '#1a1a2e';
-  // For very dark or very light colors, slightly adjust for visibility on dark bg
-  if (faction.color === '#000000') return '#2a2a3e';
-  if (faction.color === '#FFFFFF') return '#d4d4e0';
+/* ------------------------------------------------------------------ */
+/*  Faction color lookup                                               */
+/* ------------------------------------------------------------------ */
+
+const UNOWNED_COLOR = '#1a2035';
+const DARK_GRAY = '#2a2a3a';
+
+function getFactionColor(factionId: number): string {
+  if (factionId === NO_FACTION) return UNOWNED_COLOR;
+  const faction = FACTIONS[factionId];
+  if (!faction) return DARK_GRAY;
+  // Special handling for very dark / white colors to keep them visible on dark bg
+  if (faction.color === '#000000') return '#333333';
+  if (faction.color === '#FFFFFF') return '#c8d0e0';
+  if (faction.color === '#1A1A1A') return '#3a3a4a';
   return faction.color;
 }
 
-// ── Component ──────────────────────────────────────────────────────────────────
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
+/* ------------------------------------------------------------------ */
 
-export default function WorldMap({ mapState, onSelectRegion }: WorldMapProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+const WORLD_ATLAS_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
+
+export function WorldMap({ mapState, onRegionClick, className, mini = false }: WorldMapProps) {
+  const [topoData, setTopoData] = useState<Topology | null>(null);
+  const [hoveredRegion, setHoveredRegion] = useState<number | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const svgRef = useRef<SVGSVGElement>(null);
-  const tooltipRef = useRef<HTMLDivElement>(null);
-  const [loaded, setLoaded] = useState(false);
 
-  const handleClick = useCallback(
-    (countryId: string) => {
-      const regionId = countryToRegionId[countryId];
-      if (regionId !== undefined) {
-        onSelectRegion(regionId, countryId);
-      }
-    },
-    [onSelectRegion],
+  /* Fetch TopoJSON on mount */
+  useEffect(() => {
+    let cancelled = false;
+    fetch(WORLD_ATLAS_URL)
+      .then((res) => res.json())
+      .then((data: Topology) => {
+        if (!cancelled) setTopoData(data);
+      })
+      .catch((err) => console.error('Failed to load world map data:', err));
+    return () => { cancelled = true; };
+  }, []);
+
+  /* Projection */
+  const width = mini ? 400 : 960;
+  const height = mini ? 200 : 500;
+
+  const projection = useMemo(
+    () =>
+      geoNaturalEarth1()
+        .scale(mini ? 65 : 153)
+        .translate([width / 2, height / 2]),
+    [mini, width, height]
   );
 
-  useEffect(() => {
-    if (!svgRef.current || !containerRef.current) return;
+  const pathGenerator = useMemo(() => geoPath().projection(projection), [projection]);
 
-    const container = containerRef.current;
-    const svg = d3.select(svgRef.current);
-    const tooltip = d3.select(tooltipRef.current);
+  /* Convert TopoJSON -> GeoJSON features + build region map */
+  const { countries, regionMap, regionToName } = useMemo(() => {
+    if (!topoData) return { countries: [] as CountryFeature[], regionMap: new Map<string, number>(), regionToName: new Map<number, string>() };
 
-    const width = container.clientWidth;
-    const height = container.clientHeight;
+    const geojson = feature(
+      topoData,
+      topoData.objects.countries as GeometryCollection<CountryProperties>
+    ) as FeatureCollection<Geometry, CountryProperties>;
 
-    svg.attr('viewBox', `0 0 ${width} ${height}`);
+    const feats = geojson.features as CountryFeature[];
+    const rMap = buildCountryToRegionMap(feats);
 
-    const projection = d3.geoNaturalEarth1()
-      .fitSize([width, height], { type: 'Sphere' } as d3.GeoPermissibleObjects);
+    const rToName = new Map<number, string>();
+    for (const f of feats) {
+      const rid = rMap.get(f.id);
+      if (rid !== undefined) {
+        rToName.set(rid, f.properties.name);
+      }
+    }
 
-    const path = d3.geoPath().projection(projection);
+    return { countries: feats, regionMap: rMap, regionToName: rToName };
+  }, [topoData]);
 
-    // Zoom behavior
-    const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([1, 8])
-      .on('zoom', (event) => {
-        g.attr('transform', event.transform.toString());
-      });
+  /* Event handlers */
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (mini) return;
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    setTooltipPos({ x: e.clientX - rect.left + 12, y: e.clientY - rect.top - 8 });
+  }, [mini]);
 
-    svg.call(zoom);
+  const handleCountryHover = useCallback((regionId: number | null) => {
+    if (mini) return;
+    setHoveredRegion(regionId);
+  }, [mini]);
 
-    const g = svg.select<SVGGElement>('g.map-group').empty()
-      ? svg.append('g').attr('class', 'map-group')
-      : svg.select<SVGGElement>('g.map-group');
+  const handleCountryClick = useCallback((regionId: number) => {
+    if (mini) return;
+    onRegionClick(regionId);
+  }, [mini, onRegionClick]);
 
-    // Fetch and render TopoJSON
-    d3.json<Topology>('/data/countries-50m.json').then((topo) => {
-      if (!topo) return;
+  /* Tooltip info */
+  const tooltipInfo = useMemo(() => {
+    if (hoveredRegion === null) return null;
+    const countryName = regionToName.get(hoveredRegion) ?? 'Unknown';
+    const ownerId = mapState[hoveredRegion];
+    const ownerFaction = ownerId !== undefined && ownerId !== NO_FACTION ? FACTIONS[ownerId] : null;
+    return {
+      name: countryName,
+      owner: ownerFaction ? `${ownerFaction.flag} ${ownerFaction.name}` : 'Unclaimed',
+      color: ownerFaction ? getFactionColor(ownerId) : UNOWNED_COLOR,
+    };
+  }, [hoveredRegion, mapState, regionToName]);
 
-      const countriesGeo = topojson.feature(
-        topo,
-        topo.objects.countries as GeometryCollection,
-      );
+  /* Loading state */
+  if (!topoData) {
+    return (
+      <div
+        className={className}
+        style={{
+          width: mini ? 400 : '100%',
+          height: mini ? 200 : 500,
+          background: '#0a0f1e',
+          borderRadius: 8,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#4a5580',
+          fontSize: mini ? 12 : 16,
+        }}
+      >
+        Loading map...
+      </div>
+    );
+  }
 
-      const features = (countriesGeo as GeoJSON.FeatureCollection).features as unknown as CountryFeature[];
-
-      // Borders
-      const borders = topojson.mesh(
-        topo,
-        topo.objects.countries as GeometryCollection,
-        (a, b) => a !== b,
-      );
-
-      // Draw countries
-      g.selectAll('path.country')
-        .data(features, (d: unknown) => (d as CountryFeature).id)
-        .join(
-          (enter) =>
-            enter
-              .append('path')
-              .attr('class', 'country')
-              .attr('d', (d) => path(d as unknown as d3.GeoPermissibleObjects) ?? '')
-              .attr('fill', (d) => getColorForCountry(d.id, mapState))
-              .attr('stroke', '#0d0d1a')
-              .attr('stroke-width', 0.5)
-              .style('cursor', 'pointer')
-              .style('transition', 'fill 0.6s ease')
-              .on('click', (_event, d) => {
-                handleClick(d.id);
-              })
-              .on('mouseover', (event, d) => {
-                const factionId = mapState[d.id];
-                const faction = factionId !== undefined && factionId !== NO_FACTION ? getFactionById(factionId) : null;
-                const name = getCountryName(d.id);
-
-                d3.select(event.currentTarget as Element)
-                  .attr('stroke', '#fbbf24')
-                  .attr('stroke-width', 1.5)
-                  .raise();
-
-                tooltip
-                  .style('opacity', '1')
-                  .html(
-                    `<div class="font-semibold">${name}</div>` +
-                    `<div class="text-xs text-gray-400">${faction ? `Owned by ${faction.name}` : 'Neutral'}</div>`,
-                  );
-              })
-              .on('mousemove', (event) => {
-                const [x, y] = d3.pointer(event, container);
-                tooltip
-                  .style('left', `${x + 12}px`)
-                  .style('top', `${y - 10}px`);
-              })
-              .on('mouseout', (event) => {
-                d3.select(event.currentTarget as Element)
-                  .attr('stroke', '#0d0d1a')
-                  .attr('stroke-width', 0.5);
-                tooltip.style('opacity', '0');
-              })
-              .on('touchstart', (event, d) => {
-                event.preventDefault();
-                const factionId = mapState[d.id];
-                const faction = factionId !== undefined && factionId !== NO_FACTION ? getFactionById(factionId) : null;
-                const name = getCountryName(d.id);
-
-                d3.select(event.currentTarget as Element)
-                  .attr('stroke', '#fbbf24')
-                  .attr('stroke-width', 1.5)
-                  .raise();
-
-                tooltip
-                  .style('opacity', '1')
-                  .html(
-                    `<div class="font-semibold">${name}</div>` +
-                    `<div class="text-xs text-gray-400">${faction ? `Owned by ${faction.name}` : 'Neutral'}</div>`,
-                  );
-
-                const touch = event.touches[0];
-                if (touch) {
-                  const rect = container.getBoundingClientRect();
-                  tooltip
-                    .style('left', `${touch.clientX - rect.left + 12}px`)
-                    .style('top', `${touch.clientY - rect.top - 10}px`);
-                }
-              }, { passive: false } as never)
-              .on('touchend', (event, d) => {
-                event.preventDefault();
-                d3.select(event.currentTarget as Element)
-                  .attr('stroke', '#0d0d1a')
-                  .attr('stroke-width', 0.5);
-                tooltip.style('opacity', '0');
-                handleClick(d.id);
-              }, { passive: false } as never),
-          (update) =>
-            update
-              .transition()
-              .duration(600)
-              .attr('fill', (d) => getColorForCountry(d.id, mapState)),
-        );
-
-      // Borders
-      g.selectAll('path.border').remove();
-      g.append('path')
-        .datum(borders)
-        .attr('class', 'border')
-        .attr('d', path)
-        .attr('fill', 'none')
-        .attr('stroke', '#0d0d1a')
-        .attr('stroke-width', 0.3)
-        .style('pointer-events', 'none');
-
-      // Sphere outline
-      g.selectAll('path.sphere').remove();
-      g.insert('path', ':first-child')
-        .datum({ type: 'Sphere' } as d3.GeoPermissibleObjects)
-        .attr('class', 'sphere')
-        .attr('d', path)
-        .attr('fill', '#0a0a1a')
-        .attr('stroke', '#1e293b')
-        .attr('stroke-width', 0.5);
-
-      // Graticule
-      g.selectAll('path.graticule').remove();
-      const graticule = d3.geoGraticule10();
-      g.insert('path', 'path.country')
-        .datum(graticule)
-        .attr('class', 'graticule')
-        .attr('d', path)
-        .attr('fill', 'none')
-        .attr('stroke', '#1e293b')
-        .attr('stroke-width', 0.2)
-        .style('pointer-events', 'none');
-
-      setLoaded(true);
-    });
-
-    // Resize
-    const resizeObserver = new ResizeObserver(() => {
-      const w = container.clientWidth;
-      const h = container.clientHeight;
-      svg.attr('viewBox', `0 0 ${w} ${h}`);
-      projection.fitSize([w, h], { type: 'Sphere' } as d3.GeoPermissibleObjects);
-      g.selectAll<SVGPathElement, CountryFeature>('path.country')
-        .attr('d', (d) => path(d as unknown as d3.GeoPermissibleObjects) ?? '');
-      g.selectAll('path.border').attr('d', path as never);
-      g.selectAll('path.sphere').attr('d', path as never);
-      g.selectAll('path.graticule').attr('d', path as never);
-    });
-
-    resizeObserver.observe(container);
-    return () => resizeObserver.disconnect();
-  }, [mapState, handleClick]);
-
+  /* Render */
   return (
-    <div ref={containerRef} className="relative w-full h-full bg-[#0a0a1a] overflow-hidden">
+    <div
+      className={className}
+      style={{
+        position: 'relative',
+        width: mini ? 400 : '100%',
+        maxWidth: mini ? 400 : 960,
+        margin: '0 auto',
+        userSelect: 'none',
+      }}
+    >
       <svg
         ref={svgRef}
-        className="w-full h-full"
-        style={{ display: 'block' }}
-      />
+        viewBox={`0 0 ${width} ${height}`}
+        style={{
+          width: '100%',
+          height: 'auto',
+          background: '#0a0f1e',
+          borderRadius: mini ? 6 : 12,
+          cursor: mini ? 'default' : 'pointer',
+          display: 'block',
+        }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => handleCountryHover(null)}
+      >
+        {/* Defs for glow filter */}
+        <defs>
+          <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="1.5" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <filter id="hover-glow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+
+        {/* Ocean background */}
+        <rect x="0" y="0" width={width} height={height} fill="#0a0f1e" />
+
+        {/* Graticule-like subtle grid lines - optional sphere outline */}
+        <path
+          d={pathGenerator({ type: 'Sphere' }) ?? ''}
+          fill="none"
+          stroke="#1a2540"
+          strokeWidth={0.5}
+        />
+
+        {/* Countries */}
+        {countries.map((country) => {
+          const regionId = regionMap.get(country.id);
+          if (regionId === undefined) return null;
+
+          const ownerId = mapState[regionId] ?? NO_FACTION;
+          const fillColor = getFactionColor(ownerId);
+          const isHovered = hoveredRegion === regionId;
+          const d = pathGenerator(country) ?? '';
+
+          return (
+            <path
+              key={country.id}
+              d={d}
+              fill={fillColor}
+              stroke={isHovered ? '#ffffff' : '#0e1529'}
+              strokeWidth={isHovered ? 1.5 : 0.5}
+              opacity={isHovered ? 1 : 0.85}
+              filter={isHovered ? 'url(#hover-glow)' : undefined}
+              style={{
+                transition: 'fill 0.2s ease, stroke 0.2s ease, opacity 0.2s ease, stroke-width 0.2s ease',
+              }}
+              onMouseEnter={() => handleCountryHover(regionId)}
+              onClick={() => handleCountryClick(regionId)}
+            />
+          );
+        })}
+
+        {/* Re-draw borders on top for crispness (thin lines) */}
+        {countries.map((country) => {
+          const regionId = regionMap.get(country.id);
+          if (regionId === undefined) return null;
+          const isHovered = hoveredRegion === regionId;
+          if (isHovered) return null; // hovered country already has its own border
+          const d = pathGenerator(country) ?? '';
+          return (
+            <path
+              key={`border-${country.id}`}
+              d={d}
+              fill="none"
+              stroke="#1c2844"
+              strokeWidth={0.3}
+              pointerEvents="none"
+              filter="url(#glow)"
+              style={{ opacity: 0.6 }}
+            />
+          );
+        })}
+      </svg>
+
       {/* Tooltip */}
-      <div
-        ref={tooltipRef}
-        className="absolute z-50 pointer-events-none px-3 py-2 rounded-lg bg-gray-800/95 border border-gray-600/50 shadow-xl text-sm text-white backdrop-blur-sm"
-        style={{ opacity: 0, transition: 'opacity 0.15s' }}
-      />
-      {/* Loading overlay */}
-      {!loaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a1a]">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm text-gray-400">Loading world map...</span>
+      {!mini && hoveredRegion !== null && tooltipInfo && (
+        <div
+          style={{
+            position: 'absolute',
+            left: tooltipPos.x,
+            top: tooltipPos.y,
+            pointerEvents: 'none',
+            background: 'rgba(10, 15, 30, 0.92)',
+            border: `1px solid ${tooltipInfo.color}`,
+            borderRadius: 8,
+            padding: '8px 14px',
+            color: '#e0e6f0',
+            fontSize: 13,
+            lineHeight: 1.5,
+            zIndex: 100,
+            whiteSpace: 'nowrap',
+            boxShadow: `0 0 12px ${tooltipInfo.color}44, 0 4px 16px rgba(0,0,0,0.5)`,
+            transform: 'translateY(-100%)',
+          }}
+        >
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>
+            {tooltipInfo.name}
+          </div>
+          <div style={{ color: tooltipInfo.color, fontSize: 12 }}>
+            {tooltipInfo.owner}
           </div>
         </div>
       )}

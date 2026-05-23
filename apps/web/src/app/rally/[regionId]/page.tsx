@@ -1,664 +1,454 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { parseEther, formatEther } from 'viem';
-import Navbar from '@/components/Navbar';
-import GasCostBadge from '@/components/GasCostBadge';
-import { useOkbPrice } from '@/hooks/useOkbPrice';
-import { CONTRACTS, oklinkTx } from '@/config/contracts';
-import { TerritoryMapABI } from '@/config/abi/TerritoryMap';
-import { FactionRegistryABI } from '@/config/abi/FactionRegistry';
-import { MockUSDTABI } from '@/config/abi/MockUSDT';
-import { regionIdToCountry, getCountryName, isValidRegion } from '@/config/regionMapping';
-import { getFactionById, NO_FACTION, FACTIONS } from '@/config/factions';
+import { parseUnits, formatUnits } from 'viem';
+import {
+  useAccount,
+  useReadContract,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from 'wagmi';
+import { CONTRACTS, OKLINK_TX } from '@/lib/contracts';
+import { MockUSDTABI, TerritoryMapABI, FactionRegistryABI } from '@/lib/abi';
+import { getFaction, NO_FACTION } from '@/lib/factions';
 
-// ---------------------------------------------------------------------------
-// Parse Solidity revert reasons into user-friendly messages
-// ---------------------------------------------------------------------------
-const REVERT_MAP: Record<string, string> = {
-  NotEnrolled: 'You must join a faction first',
-  ZeroAmount: 'Amount must be greater than zero',
-  InvalidRegion: 'This region does not exist',
-  InsufficientBalance: 'Insufficient mUSDT balance',
-  InsufficientAllowance: 'Token approval required',
-  TransferFailed: 'Token transfer failed. Check your balance and approval.',
-};
+/* ── Helpers ── */
+const DECIMALS = 18;
+const toWei = (v: number) => parseUnits(v.toString(), DECIMALS);
 
-function parseContractError(error: Error | string): string {
-  const msg = typeof error === 'string' ? error : error.message ?? '';
-  for (const [reason, friendly] of Object.entries(REVERT_MAP)) {
-    if (msg.includes(reason)) return friendly;
-  }
-  return msg.slice(0, 200);
+/* placeholder: Spinner */
+function Spinner() {
+  return (
+    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+    </svg>
+  );
 }
 
-// ---------------------------------------------------------------------------
-// Underdog bonus calculation (mirrors contract logic client-side)
-// ---------------------------------------------------------------------------
-function calcEffectiveAmount(
-  amount: bigint,
-  attackerPower: bigint,
-  ownerPower: bigint,
-): { effective: bigint; bonusBps: bigint } {
-  if (attackerPower < ownerPower && ownerPower > 0n) {
-    let deficitBps = ((ownerPower - attackerPower) * 5000n) / ownerPower;
-    if (deficitBps > 5000n) deficitBps = 5000n;
-    const effective = (amount * (10000n + deficitBps)) / 10000n;
-    return { effective, bonusBps: deficitBps };
-  }
-  return { effective: amount, bonusBps: 0n };
+/* placeholder: StepIndicator */
+function StepIndicator({ step, current, label }: { step: number; current: number; label: string }) {
+  const done = current > step;
+  const active = current === step;
+  return (
+    <div className="flex items-center gap-3">
+      <div
+        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-colors ${
+          done
+            ? 'bg-amber-500 border-amber-500 text-gray-950'
+            : active
+            ? 'border-amber-500 text-amber-400'
+            : 'border-gray-700 text-gray-600'
+        }`}
+      >
+        {done ? (
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        ) : (
+          step
+        )}
+      </div>
+      <span className={`text-sm font-medium ${active ? 'text-white' : done ? 'text-gray-400' : 'text-gray-600'}`}>
+        {label}
+      </span>
+    </div>
+  );
 }
 
-function fmtPower(v: bigint | undefined): string {
-  if (v === undefined) return '...';
-  const n = Number(formatEther(v));
-  if (n === 0) return '0';
-  if (n < 0.01) return '<0.01';
-  return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
-}
-
-// ---------------------------------------------------------------------------
-// Page component
-// ---------------------------------------------------------------------------
-export default function RallyPage({ params }: { params: { regionId: string } }) {
+/* ── Main Page ── */
+export default function RallyPage() {
+  const params = useParams();
   const regionId = Number(params.regionId);
-  const valid = isValidRegion(regionId);
-  const countryIso = regionIdToCountry[regionId];
-  const regionName = countryIso ? getCountryName(countryIso) : `Region ${regionId}`;
-
-  // -- OKB price for gas estimate --
-  const { price: okbPrice } = useOkbPrice();
-
-  // -- local state --
-  const [amount, setAmount] = useState(0);
-  const [phase, setPhase] = useState<'idle' | 'approving' | 'rallying' | 'confirming' | 'done' | 'error'>('idle');
-  const [errorMsg, setErrorMsg] = useState('');
-
-  // -- wallet --
   const { address, isConnected } = useAccount();
 
-  // -- contract reads --
-  const { data: regionData, isLoading: regionLoading } = useReadContract({
-    address: CONTRACTS.TerritoryMap as `0x${string}`,
-    abi: TerritoryMapABI,
-    functionName: 'regions',
-    args: [regionId],
-  });
+  const [amount, setAmount] = useState(100);
+  const [txStep, setTxStep] = useState<1 | 2>(1);
+  const [successHash, setSuccessHash] = useState<string | null>(null);
 
-  const ownerFactionId = regionData ? Number((regionData as [number, bigint, number])[0]) : NO_FACTION;
-  const ownerFaction = getFactionById(ownerFactionId);
-
-  const { data: userFactionId } = useReadContract({
-    address: CONTRACTS.FactionRegistry as `0x${string}`,
-    abi: FactionRegistryABI,
-    functionName: 'factionOf',
-    args: [address!],
-    query: { enabled: !!address },
-  });
-
-  const { data: isEnrolled } = useReadContract({
-    address: CONTRACTS.FactionRegistry as `0x${string}`,
-    abi: FactionRegistryABI,
-    functionName: 'isEnrolled',
-    args: [address!],
-    query: { enabled: !!address },
-  });
-
-  const userFaction = userFactionId !== undefined ? getFactionById(Number(userFactionId)) : undefined;
-  const enrolled = Boolean(isEnrolled);
-
-  const { data: balanceRaw, isLoading: balLoading } = useReadContract({
-    address: CONTRACTS.MockUSDT as `0x${string}`,
+  /* placeholder: contract reads */
+  // -- MockUSDT balance --
+  const { data: rawBalance } = useReadContract({
+    address: CONTRACTS.MockUSDT,
     abi: MockUSDTABI,
     functionName: 'balanceOf',
-    args: [address!],
+    args: address ? [address] : undefined,
     query: { enabled: !!address },
   });
 
-  const { data: allowanceRaw, refetch: refetchAllowance } = useReadContract({
-    address: CONTRACTS.MockUSDT as `0x${string}`,
+  // -- MockUSDT allowance --
+  const { data: rawAllowance, refetch: refetchAllowance } = useReadContract({
+    address: CONTRACTS.MockUSDT,
     abi: MockUSDTABI,
     functionName: 'allowance',
-    args: [address!, CONTRACTS.TerritoryMap as `0x${string}`],
+    args: address ? [address, CONTRACTS.TerritoryMap] : undefined,
     query: { enabled: !!address },
   });
 
-  const balance = balanceRaw as bigint | undefined;
-  const allowance = allowanceRaw as bigint | undefined;
-  const maxAmount = balance ? Number(formatEther(balance)) : 0;
+  // -- User faction --
+  const { data: isEnrolled } = useReadContract({
+    address: CONTRACTS.FactionRegistry,
+    abi: FactionRegistryABI,
+    functionName: 'isEnrolled',
+    args: address ? [address] : undefined,
+    query: { enabled: !!address },
+  });
 
-  // -- power reads --
-  const { data: ownerPowerRaw } = useReadContract({
-    address: CONTRACTS.TerritoryMap as `0x${string}`,
+  const { data: userFactionId } = useReadContract({
+    address: CONTRACTS.FactionRegistry,
+    abi: FactionRegistryABI,
+    functionName: 'factionOf',
+    args: address ? [address] : undefined,
+    query: { enabled: !!address },
+  });
+
+  // -- Region info --
+  const { data: regionData } = useReadContract({
+    address: CONTRACTS.TerritoryMap,
+    abi: TerritoryMapABI,
+    functionName: 'regions',
+    args: [regionId as unknown as number],
+  });
+
+  // -- Effective power for user's faction --
+  const { data: userFactionPower, refetch: refetchUserPower } = useReadContract({
+    address: CONTRACTS.TerritoryMap,
     abi: TerritoryMapABI,
     functionName: 'effectivePower',
-    args: [regionId, ownerFactionId],
-    query: { enabled: ownerFactionId !== NO_FACTION },
+    args: userFactionId !== undefined ? [regionId as unknown as number, userFactionId as number] : undefined,
+    query: { enabled: userFactionId !== undefined && userFactionId !== NO_FACTION },
   });
 
-  const { data: attackerPowerRaw } = useReadContract({
-    address: CONTRACTS.TerritoryMap as `0x${string}`,
+  // -- Effective power for owner faction --
+  const ownerFactionId = regionData ? (regionData as [number, bigint, number])[0] : undefined;
+
+  const { data: ownerFactionPower } = useReadContract({
+    address: CONTRACTS.TerritoryMap,
     abi: TerritoryMapABI,
     functionName: 'effectivePower',
-    args: [regionId, Number(userFactionId ?? 0)],
-    query: { enabled: userFactionId !== undefined && Number(userFactionId) !== NO_FACTION },
+    args: ownerFactionId !== undefined ? [regionId as unknown as number, ownerFactionId as number] : undefined,
+    query: { enabled: ownerFactionId !== undefined && ownerFactionId !== NO_FACTION },
   });
 
-  const ownerPower = ownerPowerRaw as bigint | undefined;
-  const attackerPower = attackerPowerRaw as bigint | undefined;
+  /* placeholder: derived values */
+  const balance = rawBalance !== undefined ? rawBalance as bigint : 0n;
+  const allowance = rawAllowance !== undefined ? rawAllowance as bigint : 0n;
+  const amountWei = toWei(amount);
+  const needsApproval = allowance < amountWei;
+  const userFaction = userFactionId !== undefined ? getFaction(Number(userFactionId)) : undefined;
+  const ownerFaction = ownerFactionId !== undefined ? getFaction(Number(ownerFactionId)) : undefined;
 
-  // -- preview calculation --
-  const preview = useMemo(() => {
-    const amtWei = parseEther(String(amount));
-    const aPow = attackerPower ?? 0n;
-    const oPow = ownerPower ?? 0n;
-    const { effective, bonusBps } = calcEffectiveAmount(amtWei, aPow, oPow);
-    const newAttackerPower = aPow + effective;
-    const willCapture = amount > 0 && newAttackerPower > oPow;
-    const bonusPct = Number(bonusBps) / 100;
-    return { effective, bonusBps, newAttackerPower, willCapture, bonusPct };
-  }, [amount, attackerPower, ownerPower]);
+  // Underdog bonus: if user faction has less power than owner, show percentage
+  const userPower = userFactionPower !== undefined ? (userFactionPower as bigint) : 0n;
+  const ownerPower = ownerFactionPower !== undefined ? (ownerFactionPower as bigint) : 0n;
+  const isUnderdog =
+    userFaction &&
+    ownerFaction &&
+    Number(userFactionId) !== Number(ownerFactionId) &&
+    userPower < ownerPower;
+  const underdogPct =
+    isUnderdog && ownerPower > 0n
+      ? Math.min(50, Math.round(Number(((ownerPower - userPower) * 100n) / ownerPower)))
+      : 0;
 
-  // -- write contract hooks --
-  const { writeContract: doApprove, data: approveTxHash, reset: resetApprove } = useWriteContract();
-  const { writeContract: doRally, data: rallyTxHash, reset: resetRally } = useWriteContract();
+  // Estimated power added (raw + underdog bonus)
+  const estimatedPower = amountWei + (amountWei * BigInt(underdogPct)) / 100n;
 
-  const { isSuccess: approveSuccess } = useWaitForTransactionReceipt({
-    hash: approveTxHash,
-  });
+  /* placeholder: write hooks */
+  // -- Approve --
+  const {
+    writeContract: approveWrite,
+    data: approveTxHash,
+    isPending: approveIsPending,
+    reset: resetApprove,
+  } = useWriteContract();
 
-  const { isLoading: rallyConfirming, isSuccess: rallySuccess } = useWaitForTransactionReceipt({
-    hash: rallyTxHash,
-  });
+  const { isLoading: approveIsConfirming, isSuccess: approveIsSuccess } =
+    useWaitForTransactionReceipt({ hash: approveTxHash });
 
-  // -- transition: approval confirmed -> send rally --
+  // -- Rally --
+  const {
+    writeContract: rallyWrite,
+    data: rallyTxHash,
+    isPending: rallyIsPending,
+    reset: resetRally,
+  } = useWriteContract();
+
+  const { isLoading: rallyIsConfirming, isSuccess: rallyIsSuccess } =
+    useWaitForTransactionReceipt({ hash: rallyTxHash });
+
+  /* placeholder: effects */
+  // After approval confirmed, advance to step 2
   useEffect(() => {
-    if (approveSuccess && phase === 'approving') {
+    if (approveIsSuccess) {
       refetchAllowance();
-      const amtWei = parseEther(String(amount));
-      setPhase('rallying');
-      doRally({
-        address: CONTRACTS.TerritoryMap as `0x${string}`,
-        abi: TerritoryMapABI,
-        functionName: 'rally',
-        args: [regionId, amtWei],
-      }, {
-        onError: (err) => {
-          setPhase('error');
-          setErrorMsg(parseContractError(err));
-        },
-      });
+      setTxStep(2);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [approveSuccess]);
+  }, [approveIsSuccess, refetchAllowance]);
 
-  // -- transition: rally confirmed -> done --
+  // After rally confirmed, show success
   useEffect(() => {
-    if (rallySuccess && (phase === 'rallying' || phase === 'confirming')) {
-      setPhase('done');
+    if (rallyIsSuccess && rallyTxHash) {
+      setSuccessHash(rallyTxHash);
+      refetchUserPower();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rallySuccess]);
+  }, [rallyIsSuccess, rallyTxHash, refetchUserPower]);
 
+  // Auto-set step based on allowance
   useEffect(() => {
-    if (rallyConfirming && phase === 'rallying') {
-      setPhase('confirming');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rallyConfirming]);
+    if (!needsApproval) setTxStep(2);
+    else setTxStep(1);
+  }, [needsApproval]);
 
-  // -- action handler --
-  const handleSubmit = () => {
-    if (amount <= 0 || !address) return;
-    setErrorMsg('');
-    const amtWei = parseEther(String(amount));
-    const needsApproval = !allowance || allowance < amtWei;
+  /* placeholder: handlers */
+  const handleApprove = () => {
+    resetApprove();
+    approveWrite({
+      address: CONTRACTS.MockUSDT,
+      abi: MockUSDTABI,
+      functionName: 'approve',
+      args: [CONTRACTS.TerritoryMap, amountWei],
+    });
+  };
 
-    if (needsApproval) {
-      setPhase('approving');
-      doApprove({
-        address: CONTRACTS.MockUSDT as `0x${string}`,
-        abi: MockUSDTABI,
-        functionName: 'approve',
-        args: [CONTRACTS.TerritoryMap as `0x${string}`, amtWei],
-      }, {
-        onError: (err) => {
-          setPhase('error');
-          setErrorMsg(parseContractError(err));
-        },
-      });
-    } else {
-      setPhase('rallying');
-      doRally({
-        address: CONTRACTS.TerritoryMap as `0x${string}`,
-        abi: TerritoryMapABI,
-        functionName: 'rally',
-        args: [regionId, amtWei],
-      }, {
-        onError: (err) => {
-          setPhase('error');
-          setErrorMsg(parseContractError(err));
-        },
-      });
-    }
+  const handleRally = () => {
+    resetRally();
+    rallyWrite({
+      address: CONTRACTS.TerritoryMap,
+      abi: TerritoryMapABI,
+      functionName: 'rally',
+      args: [regionId, amountWei],
+    });
   };
 
   const handleReset = () => {
-    setPhase('idle');
-    setAmount(0);
-    setErrorMsg('');
+    setSuccessHash(null);
     resetApprove();
     resetRally();
+    refetchAllowance();
+    refetchUserPower();
   };
 
-  // -- button label & disabled --
-  const needsApproval = allowance !== undefined && parseEther(String(amount)) > allowance;
-  const btnLabel = (() => {
-    switch (phase) {
-      case 'approving': return 'Approving...';
-      case 'rallying': return 'Sending Rally...';
-      case 'confirming': return 'Confirming...';
-      case 'done': return 'Success!';
-      case 'error': return 'Try Again';
-      default: return needsApproval ? 'Approve mUSDT' : 'Rally!';
-    }
-  })();
-
-  const btnDisabled =
-    phase === 'approving' || phase === 'rallying' || phase === 'confirming' ||
-    (phase === 'idle' && (amount <= 0 || !isConnected || !enrolled));
-
-  const isDefending = userFactionId !== undefined && Number(userFactionId) === ownerFactionId && ownerFactionId !== NO_FACTION;
-
-  // -- faucet hooks --
-  const { writeContract: doFaucet, data: faucetTxHash, isPending: faucetPending, error: faucetError, reset: resetFaucet } = useWriteContract();
-  const { isLoading: faucetConfirming, isSuccess: faucetSuccess } = useWaitForTransactionReceipt({ hash: faucetTxHash });
-
-  const handleFaucet = () => {
-    resetFaucet();
-    doFaucet({
-      address: CONTRACTS.MockUSDT as `0x${string}`,
-      abi: MockUSDTABI,
-      functionName: 'faucet',
-      args: [],
-    });
-  };
-
-  // -- defect hooks --
-  const { writeContract: doDefect, data: defectTxHash, isPending: defectPending, error: defectError, reset: resetDefect } = useWriteContract();
-  const { isLoading: defectConfirming, isSuccess: defectSuccess } = useWaitForTransactionReceipt({ hash: defectTxHash });
-
-  const canShowDefect = isConnected && enrolled && ownerFactionId !== NO_FACTION
-    && userFactionId !== undefined && Number(userFactionId) === ownerFactionId;
-
-  // Show defection opportunity prompt when user is connected & enrolled but NOT in owner faction
-  const canShowDefectPrompt = isConnected && enrolled && ownerFactionId !== NO_FACTION
-    && userFactionId !== undefined && Number(userFactionId) !== ownerFactionId;
-
-  const handleDefect = () => {
-    resetDefect();
-    doDefect({
-      address: CONTRACTS.TerritoryMap as `0x${string}`,
-      abi: TerritoryMapABI,
-      functionName: 'defect',
-      args: [regionId],
-    });
-  };
-
-  // -------------------------------------------------------------------------
-  // RENDER
-  // -------------------------------------------------------------------------
-  if (!valid) {
-    return (
-      <div className="min-h-screen bg-gray-950 text-white">
-        <Navbar />
-        <div className="pt-20 flex flex-col items-center justify-center gap-4">
-          <p className="text-xl text-red-400">Invalid region ID</p>
-          <Link href="/map" className="text-amber-400 hover:underline">&larr; Back to Map</Link>
-        </div>
-      </div>
-    );
-  }
-
+  /* placeholder: render */
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      <Navbar />
+    <div className="min-h-screen pt-24 pb-16 px-4 sm:px-6 lg:px-8">
+      {/* Background effects */}
+      <div className="pointer-events-none fixed inset-0 z-0">
+        <div className="absolute -top-40 -left-40 h-[600px] w-[600px] rounded-full bg-amber-500/5 blur-3xl" />
+        <div className="absolute -bottom-60 -right-40 h-[500px] w-[500px] rounded-full bg-amber-400/5 blur-3xl" />
+      </div>
 
-      <main className="pt-20 pb-12 px-4 max-w-lg mx-auto flex flex-col gap-6">
+      <div className="relative z-10 max-w-lg mx-auto">
         {/* Back link */}
-        <Link href="/map" className="text-sm text-gray-400 hover:text-white transition-colors flex items-center gap-1">
-          <span>&larr;</span> Back to Map
+        <Link
+          href="/map"
+          className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-amber-400 transition-colors mb-6"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+          </svg>
+          Back to Map
         </Link>
 
-        {/* Header card */}
-        <div className="rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800 border border-gray-700/50 p-6">
-          <h1 className="text-2xl font-bold mb-1">Rally for {regionName}</h1>
-          <p className="text-sm text-gray-400">Region #{regionId}</p>
-
-          {/* Owner badge */}
-          <div className="mt-4 flex items-center gap-2">
-            <span className="text-xs text-gray-500 uppercase tracking-wide">Current Owner</span>
-            {regionLoading ? (
-              <span className="text-gray-500 text-sm">Loading...</span>
+        {/* Main card */}
+        <div className="rounded-2xl border border-gray-800/60 bg-gray-900/60 backdrop-blur-sm shadow-2xl shadow-amber-500/5 overflow-hidden">
+          {/* Header */}
+          <div className="px-6 py-5 border-b border-gray-800/60 bg-gradient-to-r from-amber-500/5 to-transparent">
+            <h1 className="text-2xl font-black tracking-tight">
+              Rally Region <span className="text-amber-400">#{regionId}</span>
+            </h1>
+            {ownerFaction ? (
+              <p className="text-sm text-gray-400 mt-1">
+                Current owner: <span style={{ color: ownerFaction.color }}>{ownerFaction.flag} {ownerFaction.name}</span>
+              </p>
             ) : ownerFactionId === NO_FACTION ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-700 text-gray-300 text-sm font-medium">
-                Unclaimed
-              </span>
+              <p className="text-sm text-gray-500 mt-1">Unclaimed territory</p>
             ) : (
-              <span
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium"
-                style={{ backgroundColor: (ownerFaction?.color ?? '#808080') + '30', color: ownerFaction?.color ?? '#ccc', border: `1px solid ${ownerFaction?.color ?? '#808080'}50` }}
-              >
-                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: ownerFaction?.color }} />
-                {ownerFaction?.name ?? 'Unknown'}
-              </span>
+              <p className="text-sm text-gray-600 mt-1">Loading region data...</p>
             )}
           </div>
 
-          {/* User faction */}
-          {isConnected && (
-            <div className="mt-3 flex items-center gap-2">
-              <span className="text-xs text-gray-500 uppercase tracking-wide">Your Faction</span>
-              {!enrolled ? (
-                <span className="text-amber-400 text-sm">Not enrolled &mdash; <Link href="/profile" className="underline">join a faction</Link></span>
-              ) : userFaction ? (
-                <span
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium"
-                  style={{ backgroundColor: userFaction.color + '30', color: userFaction.color, border: `1px solid ${userFaction.color}50` }}
-                >
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: userFaction.color }} />
-                  {userFaction.name}
-                </span>
-              ) : (
-                <span className="text-gray-500 text-sm">Loading...</span>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Wallet not connected */}
-        {!isConnected ? (
-          <div className="rounded-2xl border border-gray-700/50 bg-gray-900 p-6 text-center">
-            <p className="text-gray-400">Connect your wallet to rally.</p>
-          </div>
-        ) : !enrolled ? (
-          <div className="rounded-2xl border border-amber-700/40 bg-amber-950/30 p-6 text-center">
-            <p className="text-amber-300">You must join a faction before rallying.</p>
-            <Link href="/profile" className="mt-2 inline-block text-amber-400 underline text-sm">Go to Profile</Link>
-          </div>
-        ) : (
-          <>
-            {/* Slider card */}
-            <div className="rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800 border border-gray-700/50 p-6">
-              <div className="flex items-center justify-between mb-3">
-                <label className="text-sm font-medium text-gray-300">Rally Amount (mUSDT)</label>
-                <span className="text-xs text-gray-500">
-                  Balance: {balLoading ? '...' : Math.floor(maxAmount).toLocaleString()}
-                </span>
+          <div className="p-6 space-y-6">
+            {/* Not connected */}
+            {!isConnected && (
+              <div className="text-center py-8">
+                <p className="text-gray-400 mb-2">Connect your wallet to rally.</p>
               </div>
+            )}
 
-              <input
-                type="range"
-                min={0}
-                max={Math.floor(maxAmount)}
-                step={1}
-                value={amount}
-                onChange={(e) => setAmount(Number(e.target.value))}
-                disabled={phase !== 'idle' && phase !== 'error'}
-                className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-amber-500 bg-gray-700"
-              />
-
-              <div className="mt-3 flex items-center gap-3">
-                <input
-                  type="number"
-                  min={0}
-                  max={Math.floor(maxAmount)}
-                  value={amount}
-                  onChange={(e) => {
-                    const v = Math.min(Number(e.target.value) || 0, Math.floor(maxAmount));
-                    setAmount(Math.max(0, v));
-                  }}
-                  disabled={phase !== 'idle' && phase !== 'error'}
-                  className="w-28 px-3 py-2 rounded-lg bg-gray-800 border border-gray-600 text-white text-center text-lg font-mono focus:outline-none focus:border-amber-500 transition-colors"
-                />
-                <span className="text-gray-400 text-sm">mUSDT</span>
-                <button
-                  onClick={() => setAmount(Math.floor(maxAmount))}
-                  disabled={phase !== 'idle' && phase !== 'error'}
-                  className="ml-auto text-xs text-amber-400 hover:text-amber-300 transition-colors disabled:opacity-40"
+            {/* Connected but not enrolled */}
+            {isConnected && isEnrolled === false && (
+              <div className="text-center py-8 space-y-4">
+                <div className="w-16 h-16 mx-auto rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                  <svg className="w-8 h-8 text-amber-400" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                  </svg>
+                </div>
+                <p className="text-gray-300 font-semibold">Join a faction first</p>
+                <p className="text-sm text-gray-500">You need to pick a nation before you can rally.</p>
+                <Link
+                  href="/map"
+                  className="inline-flex items-center justify-center px-6 py-2.5 text-sm font-bold text-gray-950 bg-gradient-to-r from-amber-400 to-amber-500 rounded-xl hover:shadow-amber-500/30 hover:shadow-lg transition-all"
                 >
-                  MAX
-                </button>
+                  Choose Your Nation
+                </Link>
               </div>
+            )}
 
-              {maxAmount === 0 && !balLoading && (
-                <div className="mt-3 rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-4">
-                  <p className="text-xs text-gray-400 mb-2">Your mUSDT balance is zero. Claim free test tokens to start rallying.</p>
-                  <button
-                    onClick={handleFaucet}
-                    disabled={faucetPending || faucetConfirming}
-                    className="w-full rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 px-4 py-2 text-sm font-bold text-white transition-all hover:scale-[1.01] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {faucetPending ? 'Signing...' : faucetConfirming ? 'Confirming...' : faucetSuccess ? 'Claimed! Refresh balance...' : 'Claim 1,000 mUSDT'}
-                  </button>
-                  {faucetError && (
-                    <p className="mt-1 text-xs text-red-400">
-                      {faucetError.message?.includes('FaucetCooldown')
-                        ? 'Faucet is on cooldown — please wait 12 hours between claims'
-                        : 'Faucet claim failed'}
-                    </p>
-                  )}
-                  {faucetSuccess && faucetTxHash && (
-                    <a
-                      href={oklinkTx(faucetTxHash)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-1 inline-block text-xs text-amber-400 hover:text-amber-300 underline"
-                    >
-                      View on OKLink &rarr;
-                    </a>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Preview panel */}
-            <div className="rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800 border border-gray-700/50 p-6 space-y-4">
-              <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">Power Preview</h2>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="rounded-xl bg-gray-800/60 p-4">
-                  <p className="text-xs text-gray-500 mb-1">{ownerFaction?.code ?? 'Owner'} Power</p>
-                  <p className="text-lg font-bold" style={{ color: ownerFaction?.color ?? '#aaa' }}>
-                    {fmtPower(ownerPower)}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-gray-800/60 p-4">
-                  <p className="text-xs text-gray-500 mb-1">{userFaction?.code ?? 'You'} Power</p>
-                  <p className="text-lg font-bold" style={{ color: userFaction?.color ?? '#aaa' }}>
-                    {fmtPower(attackerPower)}
-                  </p>
-                </div>
-              </div>
-
-              {amount > 0 && (
-                <div
-                  className="rounded-xl border p-4 space-y-3"
-                  style={{
-                    borderColor: preview.willCapture ? '#22c55e50' : '#f59e0b40',
-                    backgroundColor: preview.willCapture ? '#22c55e08' : '#f59e0b08',
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400">Estimated New Power</span>
-                    <span className="text-lg font-bold" style={{ color: userFaction?.color ?? '#eee' }}>
-                      {fmtPower(preview.newAttackerPower)}
-                    </span>
+            {/* Connected + enrolled: rally form */}
+            {isConnected && isEnrolled && !successHash && (
+              <>
+                {/* Your faction */}
+                {userFaction && (
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-800/40 border border-gray-700/50">
+                    <span className="text-2xl">{userFaction.flag}</span>
+                    <div>
+                      <p className="text-sm font-semibold text-white">{userFaction.name}</p>
+                      <p className="text-xs text-gray-500">Your faction</p>
+                    </div>
                   </div>
+                )}
 
-                  {preview.bonusBps > 0n && (
-                    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
-                      preview.bonusPct >= 30
-                        ? 'bg-green-900/40 shadow-[0_0_15px_rgba(34,197,94,0.15)]'
-                        : 'bg-amber-900/30'
-                    }`}>
-                      <span className={`text-xs font-semibold ${
-                        preview.bonusPct >= 30 ? 'text-green-400' : 'text-amber-400'
-                      }`}>
-                        +{preview.bonusPct.toFixed(1)}% Underdog Bonus
-                      </span>
-                      <span className="text-xs text-gray-500 ml-auto">
-                        +{fmtPower(preview.effective - parseEther(String(amount)))} bonus
-                      </span>
+                {/* Balance */}
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">Your mUSDT Balance</span>
+                  <span className="text-white font-mono">
+                    {formatUnits(balance, DECIMALS)} mUSDT
+                  </span>
+                </div>
+
+                {/* Slider */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium text-gray-300">Rally Amount</label>
+                    <span className="text-sm font-bold text-amber-400 font-mono">{amount} mUSDT</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={1}
+                    max={1000}
+                    value={amount}
+                    onChange={(e) => setAmount(Number(e.target.value))}
+                    className="w-full h-2 rounded-full appearance-none cursor-pointer bg-gray-800 accent-amber-500"
+                  />
+                  <div className="flex justify-between text-xs text-gray-600 mt-1">
+                    <span>1</span>
+                    <span>1000</span>
+                  </div>
+                </div>
+
+                {/* Power info */}
+                <div className="space-y-2 p-4 rounded-xl bg-gray-800/30 border border-gray-700/40">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Your faction power</span>
+                    <span className="text-white font-mono">{formatUnits(userPower, DECIMALS)}</span>
+                  </div>
+                  {ownerFaction && Number(userFactionId) !== Number(ownerFactionId) && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Owner power ({ownerFaction.code})</span>
+                      <span className="text-white font-mono">{formatUnits(ownerPower, DECIMALS)}</span>
                     </div>
                   )}
-
-                  <div className="flex items-center gap-2">
-                    {preview.willCapture ? (
-                      <>
-                        <span className="inline-block w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                        <span className="text-sm font-semibold text-green-400">Will capture this region!</span>
-                      </>
-                    ) : isDefending ? (
-                      <>
-                        <span className="inline-block w-2 h-2 rounded-full bg-blue-400" />
-                        <span className="text-sm text-blue-300">Reinforcing your territory</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
-                        <span className="text-sm text-amber-300">Not enough to capture yet</span>
-                      </>
-                    )}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Estimated power added</span>
+                    <span className="text-amber-400 font-mono font-semibold">
+                      +{formatUnits(estimatedPower, DECIMALS)}
+                    </span>
                   </div>
+                  {underdogPct > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-emerald-400">Underdog bonus</span>
+                      <span className="text-emerald-400 font-bold">+{underdogPct}%</span>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {/* Action button */}
-            <button
-              onClick={phase === 'error' || phase === 'done' ? handleReset : handleSubmit}
-              disabled={btnDisabled}
-              className={`w-full py-4 rounded-2xl text-lg font-bold transition-all duration-200 ${
-                phase === 'done'
-                  ? 'bg-green-600 hover:bg-green-500 text-white'
-                  : phase === 'error'
-                  ? 'bg-red-700 hover:bg-red-600 text-white'
-                  : btnDisabled
-                  ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black shadow-lg shadow-amber-500/20'
-              }`}
-            >
-              {btnLabel}
-            </button>
+                {/* Step indicators */}
+                <div className="flex items-center gap-6">
+                  <StepIndicator step={1} current={txStep} label="Approve mUSDT" />
+                  <div className="flex-1 h-px bg-gray-800" />
+                  <StepIndicator step={2} current={txStep} label="Rally" />
+                </div>
 
-            {/* Gas cost estimate */}
-            <div className="flex justify-center">
-              <GasCostBadge okbPrice={okbPrice} />
-            </div>
+                {/* Action buttons */}
+                {txStep === 1 && (
+                  <button
+                    onClick={handleApprove}
+                    disabled={approveIsPending || approveIsConfirming || balance < amountWei}
+                    className="w-full py-3.5 rounded-xl font-bold text-gray-950 bg-gradient-to-r from-amber-400 to-amber-500 shadow-lg shadow-amber-500/20 hover:shadow-amber-500/40 hover:scale-[1.02] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2"
+                  >
+                    {approveIsPending || approveIsConfirming ? (
+                      <>
+                        <Spinner />
+                        {approveIsPending ? 'Confirm in Wallet...' : 'Confirming...'}
+                      </>
+                    ) : balance < amountWei ? (
+                      'Insufficient mUSDT Balance'
+                    ) : (
+                      'Approve mUSDT'
+                    )}
+                  </button>
+                )}
 
-            {/* Error message */}
-            {phase === 'error' && errorMsg && (
-              <div className="rounded-xl bg-red-950/40 border border-red-800/50 p-4">
-                <p className="text-sm text-red-400 break-all">{errorMsg}</p>
-              </div>
+                {txStep === 2 && (
+                  <button
+                    onClick={handleRally}
+                    disabled={rallyIsPending || rallyIsConfirming || balance < amountWei}
+                    className="w-full py-3.5 rounded-xl font-bold text-gray-950 bg-gradient-to-r from-amber-400 to-amber-500 shadow-lg shadow-amber-500/20 hover:shadow-amber-500/40 hover:scale-[1.02] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2"
+                  >
+                    {rallyIsPending || rallyIsConfirming ? (
+                      <>
+                        <Spinner />
+                        {rallyIsPending ? 'Confirm in Wallet...' : 'Confirming...'}
+                      </>
+                    ) : balance < amountWei ? (
+                      'Insufficient mUSDT Balance'
+                    ) : (
+                      `Rally ${amount} mUSDT`
+                    )}
+                  </button>
+                )}
+              </>
             )}
 
-            {/* Success panel */}
-            {phase === 'done' && rallyTxHash && (
-              <div className="rounded-xl bg-green-950/30 border border-green-800/40 p-4 space-y-2">
-                <p className="text-green-400 font-semibold">Rally submitted successfully!</p>
+            {/* Success state */}
+            {successHash && (
+              <div className="text-center py-8 space-y-4">
+                <div className="w-16 h-16 mx-auto rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
+                  <svg className="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <p className="text-lg font-bold text-white">Rally Successful!</p>
+                <p className="text-sm text-gray-400">
+                  You committed {amount} mUSDT to Region #{regionId}
+                </p>
                 <a
-                  href={oklinkTx(rallyTxHash)}
+                  href={OKLINK_TX(successHash)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sm text-amber-400 hover:text-amber-300 underline break-all"
+                  className="inline-flex items-center gap-2 text-sm text-amber-400 hover:text-amber-300 transition-colors"
                 >
-                  View on OKLink &rarr;
+                  View on OKLink
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-4.5-4.5h6m0 0v6m0-6L9.75 14.25" />
+                  </svg>
                 </a>
-              </div>
-            )}
-
-            {/* Defection panel — visible when user is in the owner faction */}
-            {canShowDefect && (
-              <div className="rounded-2xl border border-red-500/30 bg-red-950/20 p-6">
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl flex-shrink-0">{'\u{1F5E1}\uFE0F'}</span>
-                  <div className="flex-1">
-                    <h3 className="text-base font-bold text-red-400 mb-1">Defection Available</h3>
-                    <p className="text-sm text-gray-400 mb-4">
-                      You previously contributed to another faction in this region.
-                      Defect to convert 80% of that stale contribution into power for{' '}
-                      <span className="font-semibold" style={{ color: ownerFaction?.color }}>
-                        {ownerFaction?.name}
-                      </span>
-                      , with 20% as your finder&apos;s reward.
-                    </p>
-                    <button
-                      onClick={handleDefect}
-                      disabled={defectPending || defectConfirming}
-                      className="w-full py-3 rounded-xl border border-red-500/40 bg-red-500/10 text-sm font-bold text-red-400
-                        transition-all hover:bg-red-500/20 hover:scale-[1.01] active:scale-[0.99]
-                        disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {defectPending ? 'Signing...' : defectConfirming ? 'Confirming...' : defectSuccess ? 'Defected!' : 'Defect & Reclaim Power'}
-                    </button>
-                    {defectError && (
-                      <p className="mt-2 text-xs text-red-400/70">
-                        {defectError.message?.includes('NoDefectableContribution')
-                          ? 'No defectable contribution found in this region'
-                          : 'Defection failed — you may not have old-faction contributions here'}
-                      </p>
-                    )}
-                    {defectSuccess && defectTxHash && (
-                      <a
-                        href={oklinkTx(defectTxHash)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-2 inline-block text-sm text-amber-400 hover:text-amber-300 underline"
-                      >
-                        View defection on OKLink &rarr;
-                      </a>
-                    )}
-                  </div>
+                <div className="pt-2">
+                  <button
+                    onClick={handleReset}
+                    className="px-6 py-2.5 text-sm font-semibold text-amber-400 border border-amber-500/30 rounded-xl hover:bg-amber-500/10 hover:border-amber-500/50 transition-all"
+                  >
+                    Rally Again
+                  </button>
                 </div>
               </div>
             )}
-
-            {/* Defection Opportunity — prompt for users NOT in the owner faction */}
-            {canShowDefectPrompt && (
-              <div className="rounded-2xl border border-amber-500/30 bg-amber-950/20 p-6">
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl flex-shrink-0">{'\u{1F5E1}\uFE0F'}</span>
-                  <div className="flex-1">
-                    <h3 className="text-base font-bold text-amber-400 mb-1">Defection Opportunity</h3>
-                    <p className="text-sm text-gray-400 mb-4">
-                      <span className="font-semibold" style={{ color: ownerFaction?.color }}>
-                        {ownerFaction?.name}
-                      </span>{' '}
-                      holds this region. If you previously rallied here under a different faction,
-                      you can switch to{' '}
-                      <span className="font-semibold" style={{ color: ownerFaction?.color }}>
-                        {ownerFaction?.name}
-                      </span>{' '}
-                      and defect &mdash; converting 80% of your old contribution into their power,
-                      with 20% as your finder&apos;s reward.
-                    </p>
-                    <a
-                      href="/me"
-                      className="inline-flex items-center gap-1 text-sm font-bold text-amber-400 hover:text-amber-300 transition-colors"
-                    >
-                      Switch Faction on Profile &rarr;
-                    </a>
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </main>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

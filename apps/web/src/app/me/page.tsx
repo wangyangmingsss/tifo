@@ -1,572 +1,304 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useEffect } from 'react';
 import Link from 'next/link';
-import Navbar from '@/components/Navbar';
-import { FACTIONS, FACTION_COUNT, getFactionById, NO_FACTION } from '@/config/factions';
-import { CONTRACTS, oklinkTx } from '@/config/contracts';
-import { FactionRegistryABI } from '@/config/abi/FactionRegistry';
-import { TerritoryMapABI } from '@/config/abi/TerritoryMap';
-import { WarChestABI } from '@/config/abi/WarChest';
-import { MockUSDTABI } from '@/config/abi/MockUSDT';
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { formatEther } from 'viem';
-import { useOkbPrice } from '@/hooks/useOkbPrice';
+import { formatUnits } from 'viem';
+import { CONTRACTS, OKLINK_TX } from '@/lib/contracts';
+import { FactionRegistryABI, MockUSDTABI } from '@/lib/abi';
+import { FACTIONS, getFaction } from '@/lib/factions';
 
-/* ── Flag map ────────────────────────────────────────────────────────────── */
-
-function parseContractError(error: Error | null | undefined): string | null {
-  if (!error) return null;
-  const msg = error.message ?? '';
-  const revertMap: Record<string, string> = {
-    NotEnrolled: 'You must join a faction first',
-    AlreadyEnrolled: 'You are already enrolled in a faction',
-    InvalidFaction: 'This faction does not exist',
-    TransferFailed: 'Token transfer failed',
-    FaucetCooldown: 'Faucet is on cooldown — please wait 12 hours between claims',
-  };
-  for (const [reason, friendly] of Object.entries(revertMap)) {
-    if (msg.includes(reason)) return friendly;
-  }
-  return msg.slice(0, 200);
-}
-
-const FACTION_FLAGS: Record<string, string> = {
-  AR: '\u{1F1E6}\u{1F1F7}', BR: '\u{1F1E7}\u{1F1F7}', UY: '\u{1F1FA}\u{1F1FE}', CO: '\u{1F1E8}\u{1F1F4}', EC: '\u{1F1EA}\u{1F1E8}', PY: '\u{1F1F5}\u{1F1FE}',
-  FR: '\u{1F1EB}\u{1F1F7}', ES: '\u{1F1EA}\u{1F1F8}', GB: '\u{1F1EC}\u{1F1E7}', DE: '\u{1F1E9}\u{1F1EA}', PT: '\u{1F1F5}\u{1F1F9}', NL: '\u{1F1F3}\u{1F1F1}',
-  HR: '\u{1F1ED}\u{1F1F7}', BE: '\u{1F1E7}\u{1F1EA}', BA: '\u{1F1E7}\u{1F1E6}', CH: '\u{1F1E8}\u{1F1ED}', AT: '\u{1F1E6}\u{1F1F9}', NO: '\u{1F1F3}\u{1F1F4}',
-  SE: '\u{1F1F8}\u{1F1EA}', CZ: '\u{1F1E8}\u{1F1FF}', US: '\u{1F1FA}\u{1F1F8}', MX: '\u{1F1F2}\u{1F1FD}', CA: '\u{1F1E8}\u{1F1E6}', PA: '\u{1F1F5}\u{1F1E6}',
-  HT: '\u{1F1ED}\u{1F1F9}', MA: '\u{1F1F2}\u{1F1E6}', SN: '\u{1F1F8}\u{1F1F3}', GH: '\u{1F1EC}\u{1F1ED}', ZA: '\u{1F1FF}\u{1F1E6}', CI: '\u{1F1E8}\u{1F1EE}',
-  DZ: '\u{1F1E9}\u{1F1FF}', EG: '\u{1F1EA}\u{1F1EC}', CV: '\u{1F1E8}\u{1F1FB}', CD: '\u{1F1E8}\u{1F1E9}', JP: '\u{1F1EF}\u{1F1F5}',
-  KR: '\u{1F1F0}\u{1F1F7}', AU: '\u{1F1E6}\u{1F1FA}', SA: '\u{1F1F8}\u{1F1E6}', IR: '\u{1F1EE}\u{1F1F7}', QA: '\u{1F1F6}\u{1F1E6}', UZ: '\u{1F1FA}\u{1F1FF}',
-  JO: '\u{1F1EF}\u{1F1F4}', IQ: '\u{1F1EE}\u{1F1F6}', NZ: '\u{1F1F3}\u{1F1FF}', CW: '\u{1F1E8}\u{1F1FC}', TR: '\u{1F1F9}\u{1F1F7}', TN: '\u{1F1F9}\u{1F1F3}',
-};
-
-/* ── Page component ──────────────────────────────────────────────────────── */
-
-// PLACEHOLDER
+/* placeholder: MePage */
 export default function MePage() {
   const { address, isConnected } = useAccount();
-  const { price: okbPrice } = useOkbPrice();
 
-  /* ── On-chain reads (only when connected) ──────────────────────────────── */
-
-  const { data: isEnrolled, isLoading: enrollLoading } = useReadContract({
-    address: CONTRACTS.FactionRegistry as `0x${string}`,
+  // Contract reads (only active when connected)
+  const { data: isEnrolled, refetch: refetchEnrolled } = useReadContract({
+    address: CONTRACTS.FactionRegistry,
     abi: FactionRegistryABI,
     functionName: 'isEnrolled',
     args: address ? [address] : undefined,
     query: { enabled: !!address },
   });
 
-  const { data: rawFactionId } = useReadContract({
-    address: CONTRACTS.FactionRegistry as `0x${string}`,
+  const { data: factionId, refetch: refetchFaction } = useReadContract({
+    address: CONTRACTS.FactionRegistry,
     abi: FactionRegistryABI,
     functionName: 'factionOf',
     args: address ? [address] : undefined,
     query: { enabled: !!address && !!isEnrolled },
   });
 
-  const { data: rawCounts } = useReadContract({
-    address: CONTRACTS.TerritoryMap as `0x${string}`,
-    abi: TerritoryMapABI,
-    functionName: 'territoryCounts',
-    query: { enabled: !!isEnrolled },
-  });
-
-  /* ── Join faction tx ───────────────────────────────────────────────────── */
-
-  const { writeContract: joinFaction, data: joinHash, isPending: joinPending, error: joinError, reset: resetJoinError } = useWriteContract();
-  const { isLoading: joinConfirming, isSuccess: joinSuccess } = useWaitForTransactionReceipt({ hash: joinHash });
-
-  /* ── Defect tx ─────────────────────────────────────────────────────────── */
-
-  const { writeContract: defect, data: defectHash, isPending: defectPending, error: defectError, reset: resetDefectError } = useWriteContract();
-  const { isLoading: defectConfirming } = useWaitForTransactionReceipt({ hash: defectHash });
-
-  /* ── Faucet tx ────────────────────────────────────────────────────────── */
-
-  const { data: balanceRaw, isLoading: balLoading, refetch: refetchBalance } = useReadContract({
-    address: CONTRACTS.MockUSDT as `0x${string}`,
+  const { data: balance, refetch: refetchBalance } = useReadContract({
+    address: CONTRACTS.MockUSDT,
     abi: MockUSDTABI,
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
     query: { enabled: !!address },
   });
-  const mUsdtBalance = balanceRaw !== undefined ? Number(formatEther(balanceRaw as bigint)) : undefined;
 
-  const { writeContract: claimFaucet, data: faucetHash, isPending: faucetPending, error: faucetError, reset: resetFaucetError } = useWriteContract();
-  const { isLoading: faucetConfirming, isSuccess: faucetSuccess } = useWaitForTransactionReceipt({ hash: faucetHash });
-
-  const handleFaucet = () => {
-    resetFaucetError();
-    claimFaucet({
-      address: CONTRACTS.MockUSDT as `0x${string}`,
-      abi: MockUSDTABI,
-      functionName: 'faucet',
-      args: [],
-    });
-  };
-
-  // Refetch balance after faucet success
-  useMemo(() => {
-    if (faucetSuccess) refetchBalance();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [faucetSuccess]);
-
-  /* ── WarChest passive yield reads ─────────────────────────────────── */
-
-  const { data: passiveRate } = useReadContract({
-    address: CONTRACTS.WarChest as `0x${string}`,
-    abi: WarChestABI,
-    functionName: 'passiveRatePerSecond',
+  const { data: allowance } = useReadContract({
+    address: CONTRACTS.MockUSDT,
+    abi: MockUSDTABI,
+    functionName: 'allowance',
+    args: address ? [address, CONTRACTS.TerritoryMap] : undefined,
     query: { enabled: !!address },
   });
 
-  const { data: seasonStartRaw } = useReadContract({
-    address: CONTRACTS.WarChest as `0x${string}`,
-    abi: WarChestABI,
-    functionName: 'seasonStart',
-    query: { enabled: !!address },
-  });
+  // Write hooks
+  const {
+    writeContract: joinFaction,
+    data: joinHash,
+    isPending: joinPending,
+  } = useWriteContract();
 
-  const { data: isSettled } = useReadContract({
-    address: CONTRACTS.WarChest as `0x${string}`,
-    abi: WarChestABI,
-    functionName: 'settled',
-    query: { enabled: !!address },
-  });
+  const {
+    writeContract: claimFaucet,
+    data: faucetHash,
+    isPending: faucetPending,
+  } = useWriteContract();
 
-  /* ── Claim tx ─────────────────────────────────────────────────────── */
+  // Wait for receipts
+  const { isSuccess: joinSuccess } = useWaitForTransactionReceipt({ hash: joinHash });
+  const { isSuccess: faucetSuccess } = useWaitForTransactionReceipt({ hash: faucetHash });
 
-  const { writeContract: claimReward, data: claimHash, isPending: claimPending, error: claimError, reset: resetClaimError } = useWriteContract();
-  const { isLoading: claimConfirming, isSuccess: claimSuccess } = useWaitForTransactionReceipt({ hash: claimHash });
-
-  /* ── Derived ───────────────────────────────────────────────────────────── */
-
-  const factionId = rawFactionId !== undefined ? Number(rawFactionId) : undefined;
-  const faction = factionId !== undefined && factionId !== NO_FACTION ? getFactionById(factionId) : undefined;
-
-  const territoryCount = useMemo(() => {
-    if (!faction || !rawCounts) return 0;
-    const counts = rawCounts as bigint[];
-    return faction.id < counts.length ? Number(counts[faction.id]) : 0;
-  }, [rawCounts, faction]);
-
-  // Real contribution stats from Indexer API
-  const INDEXER_API = process.env.NEXT_PUBLIC_INDEXER_API || '';
-  const [totalContributed, setTotalContributed] = useState<number>(0);
-  const [regionsParticipated, setRegionsParticipated] = useState<number>(0);
-  const [rallyCount, setRallyCount] = useState<number>(0);
-  const [contribLoading, setContribLoading] = useState(true);
-
+  // Refresh after join
   useEffect(() => {
-    if (!address || !INDEXER_API) {
-      setContribLoading(false);
-      return;
+    if (joinSuccess) {
+      refetchEnrolled();
+      refetchFaction();
     }
-    let cancelled = false;
-    setContribLoading(true);
-    fetch(`${INDEXER_API}/user/${address}`)
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(data => {
-        if (cancelled) return;
-        setTotalContributed(parseFloat(data.totalContributedFormatted) || 0);
-        setRegionsParticipated(data.regionsParticipated || 0);
-        setRallyCount(data.rallyCount || 0);
-        setContribLoading(false);
-      })
-      .catch(() => {
-        if (!cancelled) setContribLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [address, INDEXER_API]);
+  }, [joinSuccess, refetchEnrolled, refetchFaction]);
 
-  /* ── Passive yield estimation ──────────────────────────────────────── */
-
-  const estimatedPassiveYield = useMemo(() => {
-    if (!faction || !passiveRate || !seasonStartRaw) return '0';
-    const rate = Number(passiveRate);
-    if (rate === 0) return '0';
-    // Estimate: for each territory held by the faction, passive accrues at rate per second
-    // This is a rough estimate: territories * passiveRate * elapsed seconds since season start
-    const seasonStart = Number(seasonStartRaw);
-    const now = Math.floor(Date.now() / 1000);
-    const elapsed = Math.max(0, now - seasonStart);
-    // Approximate: faction's share = territories * passiveRate * elapsed
-    // divided by 1e18 for token decimals
-    const rawYield = BigInt(territoryCount) * BigInt(rate) * BigInt(elapsed);
-    return Number(formatEther(rawYield)).toLocaleString(undefined, { maximumFractionDigits: 4 });
-  }, [faction, passiveRate, seasonStartRaw, territoryCount]);
-
-  const passiveRateFormatted = useMemo(() => {
-    if (!passiveRate) return '0';
-    // passiveRate per second * 3600 = per hour
-    const hourly = BigInt(passiveRate as bigint) * BigInt(3600);
-    return Number(formatEther(hourly)).toLocaleString(undefined, { maximumFractionDigits: 6 });
-  }, [passiveRate]);
-
-  const handleClaim = () => {
-    if (!faction) return;
-    resetClaimError();
-    // Claim for all owned regions (up to first 50 to avoid gas limits)
-    const regionIds: number[] = [];
-    // Use rawCounts to figure out which regions this faction owns
-    // For simplicity, claim for regions 0-199 (contract handles no-op for non-owned)
-    for (let i = 0; i < 200 && regionIds.length < 50; i++) {
-      regionIds.push(i);
+  // Refresh after faucet
+  useEffect(() => {
+    if (faucetSuccess) {
+      refetchBalance();
     }
-    claimReward({
-      address: CONTRACTS.WarChest as `0x${string}`,
-      abi: WarChestABI,
-      functionName: 'claim',
-      args: [regionIds],
-    });
-  };
+  }, [faucetSuccess, refetchBalance]);
 
-  /* ── Faction selector state ────────────────────────────────────────────── */
+  const myFaction = factionId !== undefined ? getFaction(Number(factionId)) : undefined;
+  const formattedBalance = balance ? formatUnits(balance as bigint, 6) : '0';
+  const formattedAllowance = allowance ? formatUnits(allowance as bigint, 6) : '0';
 
-  const [selectedFaction, setSelectedFaction] = useState<number | null>(null);
-
-  const handleJoin = () => {
-    if (selectedFaction === null) return;
-    joinFaction({
-      address: CONTRACTS.FactionRegistry as `0x${string}`,
-      abi: FactionRegistryABI,
-      functionName: 'joinFaction',
-      args: [selectedFaction],
-    });
-  };
-
-  const handleDefect = (regionId: number) => {
-    defect({
-      address: CONTRACTS.TerritoryMap as `0x${string}`,
-      abi: TerritoryMapABI,
-      functionName: 'defect',
-      args: [regionId],
-    });
-  };
-
-  /* ── Share on X ────────────────────────────────────────────────────────── */
-
-  const shareText = faction
-    ? encodeURIComponent(
-        `I'm fighting for ${faction.name} in TIFO! ${territoryCount} territories held. Join the war on X Layer! @0xWangyangming`,
-      )
-    : '';
-
-  /* ── Not connected ─────────────────────────────────────────────────────── */
-
+  // ── Not Connected ──
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-gray-950 text-white">
-        <Navbar />
-        <div className="flex flex-col items-center justify-center pt-32 gap-6">
-          <div className="text-6xl">{'\u{1F512}'}</div>
-          <h1 className="text-2xl font-bold">Connect Your Wallet</h1>
-          <p className="text-gray-400 text-sm max-w-md text-center">
-            Connect your wallet to view your war record and manage your faction membership.
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="text-center">
+          <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gray-800/50 border border-gray-700/50 flex items-center justify-center">
+            <svg className="w-10 h-10 text-amber-500/60" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 0 0-2.25-2.25H15a3 3 0 1 1-6 0H5.25A2.25 2.25 0 0 0 3 12m18 0v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 9m18 0V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v3" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-2">Connect Your Wallet</h1>
+          <p className="text-gray-500 max-w-sm mx-auto">
+            Connect your wallet to view your war record, claim mUSDT, and join a faction.
           </p>
         </div>
       </div>
     );
   }
 
-  /* ── UI ─────────────────────────────────────────────────────────────────── */
-
-  return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      <Navbar />
-
-      <main className="pt-24 pb-16 px-4 max-w-4xl mx-auto">
-        <h1 className="text-3xl sm:text-4xl font-black tracking-tight mb-2 bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
-          War Record
-        </h1>
-        <p className="text-gray-500 text-sm font-mono mb-8">
-          {address?.slice(0, 6)}...{address?.slice(-4)}
-        </p>
-
-        {/* ── FAUCET CARD ───────────────────────────────────────────────── */}
-        <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-5 mb-8 backdrop-blur">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h2 className="text-base font-bold flex items-center gap-2">
-                {'\u{1F6B0}'} Get Test Tokens
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                1,000 mUSDT per claim &middot; 12h cooldown
-              </p>
-            </div>
-            <div className="text-right">
-              <div className="text-sm font-mono text-gray-300">
-                {balLoading ? '...' : mUsdtBalance !== undefined ? Math.floor(mUsdtBalance).toLocaleString() : '0'}
-              </div>
-              <div className="text-xs text-gray-500">mUSDT Balance</div>
-            </div>
+  // ── Connected but Not Enrolled: Faction Picker ──
+  if (!isEnrolled) {
+    return (
+      <div className="min-h-screen pt-24 pb-16 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-10">
+            <h1 className="text-3xl sm:text-4xl font-black text-white mb-2">
+              Choose Your <span className="text-amber-400">Faction</span>
+            </h1>
+            <p className="text-gray-500 text-sm max-w-md mx-auto">
+              Pick your nation and join the war. This choice defines your allegiance.
+            </p>
           </div>
 
-          <button
-            onClick={handleFaucet}
-            disabled={faucetPending || faucetConfirming}
-            className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 px-5 py-3 font-bold text-white transition-all hover:scale-[1.01] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {faucetPending ? 'Signing...' : faucetConfirming ? 'Confirming...' : faucetSuccess ? 'Claimed!' : 'Claim 1,000 mUSDT'}
-          </button>
-
-          {faucetError && (
-            <div className="mt-2 rounded-lg bg-red-950/40 border border-red-800/50 px-4 py-2">
-              <p className="text-sm text-red-400">{parseContractError(faucetError)}</p>
-            </div>
-          )}
-          {faucetSuccess && faucetHash && (
-            <div className="mt-2 rounded-lg bg-green-950/30 border border-green-800/40 px-4 py-2">
-              <p className="text-sm text-green-400">1,000 mUSDT claimed!</p>
+          {joinHash && (
+            <div className="max-w-lg mx-auto mb-6 p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 text-center">
+              <p className="text-sm text-amber-400 font-semibold mb-1">
+                {joinSuccess ? 'Faction joined!' : 'Transaction submitted...'}
+              </p>
               <a
-                href={oklinkTx(faucetHash)}
+                href={OKLINK_TX(joinHash)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-amber-400 hover:text-amber-300 underline"
+                className="text-xs text-amber-500/70 hover:text-amber-400 underline font-mono"
               >
-                View on OKLink &rarr;
+                View on OKLink
+              </a>
+            </div>
+          )}
+
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+            {FACTIONS.map((f) => (
+              <button
+                key={f.id}
+                disabled={joinPending}
+                onClick={() =>
+                  joinFaction({
+                    address: CONTRACTS.FactionRegistry,
+                    abi: FactionRegistryABI,
+                    functionName: 'joinFaction',
+                    args: [f.id],
+                  })
+                }
+                className="group relative flex flex-col items-center gap-1.5 p-3 rounded-xl border border-gray-800/60 bg-gray-900/40 hover:border-amber-500/40 hover:bg-gray-800/40 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span className="text-3xl">{f.flag}</span>
+                <span className="text-[10px] font-bold text-gray-400 group-hover:text-amber-400 transition-colors truncate w-full text-center">
+                  {f.code}
+                </span>
+                <div
+                  className="absolute inset-x-0 bottom-0 h-0.5 rounded-b-xl opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ backgroundColor: f.color }}
+                />
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Enrolled: Profile Dashboard ──
+  const shareText = myFaction
+    ? `I'm fighting for ${myFaction.flag} ${myFaction.name} in TIFO - the 2026 World Cup On-Chain Territory War! Join me: ${window.location.origin}/faction/${myFaction.id}`
+    : '';
+  const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}`;
+
+  return (
+    <div className="min-h-screen pt-24 pb-16 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-3xl mx-auto">
+        {/* My Faction Header */}
+        {myFaction && (
+          <div className="relative rounded-2xl border border-gray-800/60 bg-gray-900/40 backdrop-blur-sm p-8 mb-8 overflow-hidden">
+            <div
+              className="absolute inset-x-0 top-0 h-1.5"
+              style={{ backgroundColor: myFaction.color }}
+            />
+            <div className="flex items-center gap-6">
+              <span className="text-6xl">{myFaction.flag}</span>
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wider font-bold mb-1">My Faction</p>
+                <h1 className="text-2xl sm:text-3xl font-black text-white">{myFaction.name}</h1>
+                <p className="text-gray-400 text-sm">{myFaction.nameZh}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Balance & Faucet */}
+        <div className="rounded-2xl border border-gray-800/60 bg-gray-900/40 backdrop-blur-sm p-6 mb-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wider font-bold mb-1">MockUSDT Balance</p>
+              <p className="text-3xl font-black text-white font-mono tabular-nums">
+                {Number(formattedBalance).toLocaleString()} <span className="text-lg text-gray-500">mUSDT</span>
+              </p>
+              <p className="text-xs text-gray-600 mt-1">
+                Allowance: {Number(formattedAllowance).toLocaleString()} mUSDT
+              </p>
+            </div>
+            <button
+              disabled={faucetPending}
+              onClick={() =>
+                claimFaucet({
+                  address: CONTRACTS.MockUSDT,
+                  abi: MockUSDTABI,
+                  functionName: 'faucet',
+                })
+              }
+              className="flex items-center gap-2 px-6 py-3 text-sm font-bold text-gray-950 bg-gradient-to-r from-amber-400 to-amber-500 rounded-xl hover:shadow-lg hover:shadow-amber-500/25 hover:scale-[1.03] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {faucetPending ? (
+                <span className="animate-pulse">Claiming...</span>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                  </svg>
+                  Claim 1000 mUSDT
+                </>
+              )}
+            </button>
+          </div>
+
+          {faucetHash && (
+            <div className="mt-4 p-3 rounded-xl border border-amber-500/20 bg-amber-500/5">
+              <p className="text-sm text-amber-400 font-semibold">
+                {faucetSuccess ? 'Faucet claimed successfully!' : 'Transaction submitted...'}
+              </p>
+              <a
+                href={OKLINK_TX(faucetHash)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-amber-500/70 hover:text-amber-400 underline font-mono"
+              >
+                View on OKLink
               </a>
             </div>
           )}
         </div>
 
-        {/* ── LOADING ────────────────────────────────────────────────────── */}
-        {enrollLoading ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-4">
-            <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-            <p className="text-sm text-gray-400">Checking enrollment...</p>
-          </div>
-        ) : !isEnrolled && !joinSuccess ? (
-          <section>
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-6 mb-8">
-              <h2 className="text-xl font-bold mb-2">Join a Faction</h2>
-              <p className="text-gray-400 text-sm mb-6">
-                Choose your allegiance. Pick one of {FACTION_COUNT} national teams to begin your conquest.
+        {/* Contribution Stats */}
+        <div className="rounded-2xl border border-gray-800/60 bg-gray-900/40 backdrop-blur-sm p-6 mb-6">
+          <h2 className="text-lg font-bold text-white mb-4">War Record</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-4 rounded-xl border border-gray-800/40 bg-gray-800/20 text-center">
+              <p className="text-xs text-gray-500 uppercase tracking-wider font-bold mb-1">Wallet</p>
+              <p className="text-sm font-mono text-gray-300 truncate">
+                {address?.slice(0, 6)}...{address?.slice(-4)}
               </p>
-
-              {/* Faction selector grid */}
-              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2 mb-6">
-                {FACTIONS.map((f) => (
-                  <button
-                    key={f.id}
-                    onClick={() => setSelectedFaction(f.id)}
-                    className={`flex flex-col items-center gap-1 rounded-lg border p-2 transition-all text-xs ${
-                      selectedFaction === f.id
-                        ? 'border-amber-500 bg-amber-500/10 scale-105'
-                        : 'border-gray-800 bg-gray-900/40 hover:border-gray-600'
-                    }`}
-                    title={f.name}
-                  >
-                    <span className="text-xl">{FACTION_FLAGS[f.anchor] ?? ''}</span>
-                    <span className="truncate w-full text-center text-gray-400">{f.code}</span>
-                  </button>
-                ))}
-              </div>
-
-              {selectedFaction !== null && (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">{FACTION_FLAGS[FACTIONS[selectedFaction].anchor] ?? ''}</span>
-                      <span className="font-semibold">{FACTIONS[selectedFaction].name}</span>
-                    </div>
-                    <button
-                      onClick={() => { resetJoinError(); handleJoin(); }}
-                      disabled={joinPending || joinConfirming}
-                      className="ml-auto rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-3 font-bold text-gray-950 transition-all hover:scale-[1.03] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {joinPending || joinConfirming ? 'Confirming...' : 'Join Faction'}
-                    </button>
-                  </div>
-                  {joinError && (
-                    <div className="rounded-lg bg-red-950/40 border border-red-800/50 px-4 py-2">
-                      <p className="text-sm text-red-400">{parseContractError(joinError)}</p>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
-          </section>
-        ) : (
-          /* ── ENROLLED ────────────────────────────────────────────────── */
-          <section>
-            {/* Faction info card */}
-            {faction && (
-              <div className="rounded-xl border border-gray-800 bg-gray-900/50 p-6 mb-6 backdrop-blur">
-                <div className="flex items-center gap-4 mb-4">
-                  <div
-                    className="flex items-center justify-center w-16 h-16 rounded-xl text-3xl border"
-                    style={{ borderColor: faction.color, backgroundColor: faction.color + '18' }}
-                  >
-                    {FACTION_FLAGS[faction.anchor] ?? ''}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-xl font-bold" style={{ color: faction.color }}>{faction.name}</h2>
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: faction.color }} />
-                    </div>
-                    <p className="text-sm text-gray-400">{faction.code} &middot; {faction.confederation}</p>
-                  </div>
-                  <Link
-                    href={`/faction/${faction.id}`}
-                    className="ml-auto text-sm text-amber-400 hover:underline hidden sm:block"
-                  >
-                    View Faction &rarr;
-                  </Link>
-                </div>
+            <div className="p-4 rounded-xl border border-gray-800/40 bg-gray-800/20 text-center">
+              <p className="text-xs text-gray-500 uppercase tracking-wider font-bold mb-1">Faction ID</p>
+              <p className="text-sm font-mono text-gray-300">
+                {factionId !== undefined ? String(Number(factionId)) : '--'}
+              </p>
+            </div>
+          </div>
+        </div>
 
-                {/* Contribution stats */}
-                <div className="grid grid-cols-3 gap-4 mt-4">
-                  <div className="rounded-lg bg-gray-800/50 p-3 text-center">
-                    <div className="text-lg font-bold tabular-nums">
-                      {contribLoading ? '...' : totalContributed.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-xs text-gray-500 uppercase">USDT Contributed</div>
-                  </div>
-                  <div className="rounded-lg bg-gray-800/50 p-3 text-center">
-                    <div className="text-lg font-bold tabular-nums">
-                      {contribLoading ? '...' : regionsParticipated}
-                    </div>
-                    <div className="text-xs text-gray-500 uppercase">Regions Rallied</div>
-                  </div>
-                  <div className="rounded-lg bg-gray-800/50 p-3 text-center">
-                    <div className="text-lg font-bold tabular-nums" style={{ color: faction.color }}>{territoryCount}</div>
-                    <div className="text-xs text-gray-500 uppercase">Faction Territories</div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Gas cost note */}
-            {faction && okbPrice !== null && (
-              <div className="rounded-lg bg-gray-800/40 border border-gray-700/50 px-4 py-3 mb-6">
-                <p className="text-xs text-gray-400">
-                  Rally gas cost: ~${(0.000021 * okbPrice) < 0.01 ? '<$0.01' : `$${(0.000021 * okbPrice).toFixed(3)}`} per transaction on X Layer
-                </p>
-              </div>
-            )}
-
-            {/* ── Passive Yield Card ─────────────────────────────────────── */}
-            {faction && (
-              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-6 mb-6">
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl">{'\u{1F331}'}</span>
-                  <div className="flex-1">
-                    <h3 className="font-bold text-emerald-400 mb-1">Passive Yield (WarChest)</h3>
-                    <p className="text-sm text-gray-400 mb-4">
-                      Your faction earns passive rewards for every territory held. Yield accrues at{' '}
-                      <span className="text-emerald-300 font-mono">{passiveRateFormatted}</span>{' '}
-                      mUSDT per territory per hour.
-                    </p>
-
-                    <div className="grid grid-cols-2 gap-3 mb-4">
-                      <div className="rounded-lg bg-gray-800/50 p-3">
-                        <div className="text-xs text-gray-500 uppercase mb-1">Estimated Accrued</div>
-                        <div className="text-lg font-bold tabular-nums text-emerald-400">{estimatedPassiveYield}</div>
-                        <div className="text-xs text-gray-500">mUSDT (faction total)</div>
-                      </div>
-                      <div className="rounded-lg bg-gray-800/50 p-3">
-                        <div className="text-xs text-gray-500 uppercase mb-1">Season Status</div>
-                        <div className="text-lg font-bold tabular-nums">
-                          {isSettled ? (
-                            <span className="text-amber-400">Settled</span>
-                          ) : (
-                            <span className="text-emerald-400">Active</span>
-                          )}
-                        </div>
-                        <div className="text-xs text-gray-500">{isSettled ? 'Claim now!' : 'Accruing...'}</div>
-                      </div>
-                    </div>
-
-                    {isSettled ? (
-                      <div className="space-y-2">
-                        <button
-                          onClick={handleClaim}
-                          disabled={claimPending || claimConfirming}
-                          className="w-full rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 px-5 py-3 font-bold text-white transition-all hover:scale-[1.01] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {claimPending ? 'Signing...' : claimConfirming ? 'Confirming...' : claimSuccess ? 'Claimed!' : 'Claim Rewards'}
-                        </button>
-                        {claimError && (
-                          <div className="rounded-lg bg-red-950/40 border border-red-800/50 px-4 py-2">
-                            <p className="text-sm text-red-400">{parseContractError(claimError)}</p>
-                          </div>
-                        )}
-                        {claimSuccess && claimHash && (
-                          <div className="rounded-lg bg-green-950/30 border border-green-800/40 px-4 py-2">
-                            <p className="text-sm text-green-400">Rewards claimed successfully!</p>
-                            <a
-                              href={oklinkTx(claimHash)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-amber-400 hover:text-amber-300 underline"
-                            >
-                              View on OKLink &rarr;
-                            </a>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="rounded-lg bg-gray-800/30 border border-gray-700/50 px-4 py-3">
-                        <p className="text-xs text-gray-400">
-                          {'\u{23F3}'} Season is active. Rewards can be claimed after the season is settled.
-                          Keep holding territories to maximize your yield!
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Defection alert (mock: show if faction territories < 5) */}
-            {faction && territoryCount < 5 && (
-              <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-5 mb-6">
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl">{'\u{26A0}\uFE0F'}</span>
-                  <div className="flex-1">
-                    <h3 className="font-bold text-red-400 mb-1">Defection Opportunity</h3>
-                    <p className="text-sm text-gray-400 mb-3">
-                      Some of your contributions are in regions now owned by other factions.
-                      You can defect to reclaim your stake.
-                    </p>
-                    <button
-                      onClick={() => { resetDefectError(); handleDefect(0); }}
-                      disabled={defectPending || defectConfirming}
-                      className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-50"
-                    >
-                      {defectPending || defectConfirming ? 'Processing...' : 'Defect & Reclaim'}
-                    </button>
-                    {defectError && (
-                      <div className="mt-2 rounded-lg bg-red-950/40 border border-red-800/50 px-4 py-2">
-                        <p className="text-sm text-red-400">{parseContractError(defectError)}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Share on X */}
-            {faction && (
-              <a
-                href={`https://twitter.com/intent/tweet?text=${shareText}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-xl border border-gray-700 bg-gray-900/60 px-5 py-3 text-sm font-semibold text-white transition-colors hover:border-gray-500 hover:bg-gray-800"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+        {/* Defection hint */}
+        <div className="rounded-2xl border border-purple-500/20 bg-purple-500/5 backdrop-blur-sm p-6 mb-6">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-purple-300 mb-1">Defection Available</h3>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                Feeling strategic? You can defect from your current faction on contested territories.
+                Your rallied power converts to your new faction. Visit the map to find defection opportunities.
+              </p>
+              <Link href="/map" className="inline-flex items-center gap-1 mt-2 text-xs text-purple-400 hover:text-purple-300 font-semibold">
+                Explore Map
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                 </svg>
-                Share on X
-              </a>
-            )}
-          </section>
-        )}
-      </main>
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        {/* Share on X */}
+        <div className="text-center">
+          <a
+            href={twitterUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-6 py-3 text-sm font-bold border border-gray-700 rounded-xl hover:border-amber-500/30 hover:bg-gray-800/40 transition-all duration-200 text-gray-300 hover:text-white"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+            </svg>
+            Share on X
+          </a>
+        </div>
+      </div>
     </div>
   );
 }
