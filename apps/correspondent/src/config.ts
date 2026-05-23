@@ -8,6 +8,7 @@ export const config = {
   contracts: {
     territoryMap: (process.env.TERRITORY_MAP || '0x4987CFAF2CA1650887786C83746CcEC4d4941331') as `0x${string}`,
     matchOracle: (process.env.MATCH_ORACLE || '0x57E585543940cCfAB71141d84A419C3F7872d5be') as `0x${string}`,
+    factionRegistry: (process.env.FACTION_REGISTRY || '0x80449696e9F2DBEBC7F154805320f49ae5aA6E23') as `0x${string}`,
   },
 
   // X (Twitter) API credentials — OAuth 1.0a

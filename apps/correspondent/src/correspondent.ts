@@ -10,7 +10,7 @@ import {
 } from 'viem';
 import { config } from './config';
 import { publishTweet } from './twitter';
-import { tweetTerritoryCaptured, tweetDefected, tweetMatchEvent, tweetCountdown } from './templates';
+import { tweetTerritoryCaptured, tweetDefected, tweetMatchEvent, tweetCountdown, tweetFactionJoined } from './templates';
 import { getFaction } from './factions';
 import { enhanceTweet, generateTweetFromData } from './deepseek';
 
@@ -55,6 +55,18 @@ const MatchOracleEvents = [
   },
 ] as const;
 
+const FactionRegistryEvents = [
+  {
+    type: 'event' as const,
+    name: 'FactionJoined' as const,
+    inputs: [
+      { name: 'user', type: 'address' as const, indexed: true },
+      { name: 'factionId', type: 'uint8' as const, indexed: true },
+      { name: 'isSwitch', type: 'bool' as const, indexed: false },
+    ],
+  },
+] as const;
+
 // ── ABI for territoryCounts view (used by countdown) ──────────────
 const TerritoryMapView = [
   {
@@ -82,7 +94,7 @@ const xlayerTestnet: Chain = {
 
 // ── Topic0 mapping ─────────────────────────────────────────────────
 
-type EventKind = 'TerritoryCaptured' | 'Defected' | 'MatchEventPushed';
+type EventKind = 'TerritoryCaptured' | 'Defected' | 'MatchEventPushed' | 'FactionJoined';
 
 function buildTopicMap(): Map<string, EventKind> {
   const map = new Map<string, EventKind>();
@@ -90,10 +102,12 @@ function buildTopicMap(): Map<string, EventKind> {
   const capturedTopic = encodeEventTopics({ abi: TerritoryMapEvents, eventName: 'TerritoryCaptured' })[0];
   const defectedTopic = encodeEventTopics({ abi: TerritoryMapEvents, eventName: 'Defected' })[0];
   const matchTopic = encodeEventTopics({ abi: MatchOracleEvents, eventName: 'MatchEventPushed' })[0];
+  const joinedTopic = encodeEventTopics({ abi: FactionRegistryEvents, eventName: 'FactionJoined' })[0];
 
   map.set(capturedTopic, 'TerritoryCaptured');
   map.set(defectedTopic, 'Defected');
   map.set(matchTopic, 'MatchEventPushed');
+  map.set(joinedTopic, 'FactionJoined');
 
   return map;
 }
@@ -151,7 +165,7 @@ export class Correspondent {
     if (!kind) return;
 
     let tweetText: string;
-    let eventData: { type: 'capture' | 'defection' | 'match_event' | 'countdown'; details: Record<string, unknown> } | undefined;
+    let eventData: { type: 'capture' | 'defection' | 'match_event' | 'countdown' | 'faction_joined'; details: Record<string, unknown> } | undefined;
 
     try {
       switch (kind) {
@@ -230,6 +244,30 @@ export class Correspondent {
               eventType: decoded.args.eventType,
               regions: decoded.args.regions.map(Number),
               boostApplied: decoded.args.boostApplied.toString(),
+              txHash: log.transactionHash,
+            },
+          };
+          break;
+        }
+        case 'FactionJoined': {
+          const decoded = decodeEventLog({
+            abi: FactionRegistryEvents,
+            data: log.data,
+            topics: log.topics,
+            eventName: 'FactionJoined',
+          });
+          tweetText = tweetFactionJoined({
+            user: decoded.args.user,
+            factionId: decoded.args.factionId,
+            isSwitch: decoded.args.isSwitch,
+            txHash: log.transactionHash!,
+          });
+          eventData = {
+            type: 'faction_joined',
+            details: {
+              user: decoded.args.user,
+              faction: getFaction(decoded.args.factionId).name,
+              isSwitch: decoded.args.isSwitch,
               txHash: log.transactionHash,
             },
           };
@@ -332,7 +370,7 @@ export class Correspondent {
     const toBlock = safeBlock - fromBlock > maxChunk ? fromBlock + maxChunk : safeBlock;
 
     const logs = await this.client.getLogs({
-      address: [config.contracts.territoryMap, config.contracts.matchOracle],
+      address: [config.contracts.territoryMap, config.contracts.matchOracle, config.contracts.factionRegistry],
       fromBlock,
       toBlock,
     });
@@ -360,7 +398,7 @@ export class Correspondent {
   async start(): Promise<void> {
     this.running = true;
     console.log('[correspondent] Starting TIFO War Correspondent...');
-    console.log(`[correspondent] Watching: TerritoryCaptured, Defected, MatchEventPushed`);
+    console.log(`[correspondent] Watching: TerritoryCaptured, Defected, MatchEventPushed, FactionJoined`);
     console.log(`[correspondent] Mode: ${config.dryRun ? 'DRY RUN (no tweets posted)' : 'LIVE (tweets will be posted)'}`);
     console.log(`[correspondent] Starting from block: ${this.lastProcessedBlock}`);
 

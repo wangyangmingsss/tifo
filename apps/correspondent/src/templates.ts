@@ -129,3 +129,36 @@ export function tweetCountdown(params: {
 
   return pick(templates);
 }
+
+// ================================================================
+// FactionJoined tweet (welcome new warriors)
+// ================================================================
+export function tweetFactionJoined(params: {
+  user: string;
+  factionId: number;
+  isSwitch: boolean;
+  txHash: string;
+}): string {
+  const { user, factionId, isSwitch, txHash } = params;
+  const url = oklinkTxUrl(txHash);
+
+  if (isSwitch) {
+    const switchTemplates = [
+      `🔄 FACTION SWITCH!\n\n${shortAddr(user)} has switched allegiance to ${factionLabel(factionId)}!\n\nLoyalty is fluid in the territory war. New colors, new frontlines.\n\n🔗 ${url}\n\n${config.projectHandle} #TIFO #XLayer`,
+
+      `⚡ ALLEGIANCE CHANGED\n\n${shortAddr(user)} just defected and joined ${factionLabel(factionId)}.\n\nEvery switch reshapes the balance of power. Choose wisely.\n\n🔗 ${url}\n\n${config.projectHandle} #TIFO #WorldCup2026`,
+
+      `🏴 NEW COLORS!\n\n${shortAddr(user)} switched to ${factionLabel(factionId)}. The switch fee is paid — time to prove loyalty on the battlefield.\n\n🔗 ${url}\n\n${config.projectHandle} @aspect_build #TIFO #XLayer`,
+    ];
+    return pick(switchTemplates);
+  }
+
+  const joinTemplates = [
+    `⚔️ WELCOME, WARRIOR!\n\n${shortAddr(user)} has joined ${factionLabel(factionId)}!\n\nAnother soldier enters the territory war. Rally for your nation!\n\n🔗 ${url}\n\n${config.projectHandle} @aspect_build #TIFO #WorldCup2026`,
+
+    `🛡️ NEW RECRUIT!\n\n${factionLabel(factionId)} grows stronger — ${shortAddr(user)} has enlisted!\n\nThe map awaits. Will you rally or watch from the sidelines?\n\n🔗 ${url}\n\n${config.projectHandle} #TIFO #XLayer`,
+
+    `🌍 FACTION JOINED!\n\n${shortAddr(user)} pledges allegiance to ${factionLabel(factionId)}.\n\nEvery new warrior shifts the balance. 48 factions, 1 map, endless drama.\n\n🔗 ${url}\n\n${config.projectHandle} @aspect_build #TIFO #WorldCup2026 #XLayer`,
+  ];
+  return pick(joinTemplates);
+}

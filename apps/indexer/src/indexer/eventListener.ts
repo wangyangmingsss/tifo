@@ -18,6 +18,7 @@ import {
   handleMatchEventPushed,
   handleRewardClaimed,
   handleSeasonSettled,
+  refreshStats,
 } from './handlers';
 import { FactionRegistryABI } from '../abis/FactionRegistry';
 import { TerritoryMapABI } from '../abis/TerritoryMap';
@@ -178,6 +179,8 @@ export class EventIndexer {
     console.log(`[indexer] Confirmation buffer: ${config.confirmationBlocks} blocks`);
     console.log(`[indexer] Poll interval: ${config.pollIntervalMs}ms`);
 
+    let pollsSinceStatsRefresh = 0;
+
     while (this.running) {
       try {
         const result = await this.pollOnce();
@@ -185,6 +188,12 @@ export class EventIndexer {
           console.log(
             `[indexer] Processed ${result.logsProcessed} events from block ${result.fromBlock} to ${result.toBlock}`
           );
+        }
+        // Refresh persisted stats table every 10 poll cycles (~30-50s)
+        pollsSinceStatsRefresh++;
+        if (pollsSinceStatsRefresh >= 10) {
+          await refreshStats();
+          pollsSinceStatsRefresh = 0;
         }
       } catch (err) {
         console.error('[indexer] Poll error:', err);

@@ -129,3 +129,42 @@ CREATE INDEX IF NOT EXISTS idx_defections_user ON defections(user_address);
 CREATE INDEX IF NOT EXISTS idx_match_events_faction ON match_events(faction_id);
 CREATE INDEX IF NOT EXISTS idx_reward_claims_user ON reward_claims(user_address);
 CREATE INDEX IF NOT EXISTS idx_reward_claims_faction ON reward_claims(faction_id);
+
+-- contributions: per-user per-region per-faction aggregated contribution totals
+-- Maintained incrementally on each RallyPlaced event via UPSERT
+CREATE TABLE IF NOT EXISTS contributions (
+  id                SERIAL PRIMARY KEY,
+  user_address      TEXT NOT NULL,
+  region_id         SMALLINT NOT NULL,
+  faction_id        SMALLINT NOT NULL,
+  total_contributed TEXT NOT NULL DEFAULT '0',
+  rally_count       INT NOT NULL DEFAULT 0,
+  last_rally_block  BIGINT NOT NULL DEFAULT 0,
+  last_rally_tx     TEXT,
+  updated_at        TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_address, region_id, faction_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_contributions_user ON contributions(user_address);
+CREATE INDEX IF NOT EXISTS idx_contributions_region ON contributions(region_id);
+CREATE INDEX IF NOT EXISTS idx_contributions_faction ON contributions(faction_id);
+
+-- stats: persisted global statistics snapshot, refreshed periodically by the indexer
+CREATE TABLE IF NOT EXISTS stats (
+  key         TEXT PRIMARY KEY,
+  value       TEXT NOT NULL,
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Seed default stats keys
+INSERT INTO stats (key, value) VALUES
+  ('total_rallies', '0'),
+  ('total_captures', '0'),
+  ('total_defections', '0'),
+  ('total_match_events', '0'),
+  ('total_faction_joins', '0'),
+  ('total_reward_claims', '0'),
+  ('unique_users', '0'),
+  ('active_factions', '0'),
+  ('last_stats_refresh', '0')
+ON CONFLICT (key) DO NOTHING;

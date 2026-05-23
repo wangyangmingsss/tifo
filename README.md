@@ -285,6 +285,21 @@ The indexer (`apps/indexer/`) is a TypeScript service that subscribes to all TIF
 
 `FactionJoined` · `RallyPlaced` · `TerritoryCaptured` · `Defected` · `MatchEventPushed` · `RewardClaimed` · `SeasonSettled`
 
+### Database Schema (10 tables)
+
+| Table | Purpose |
+|-------|---------|
+| `indexer_state` | Cursor tracking (last indexed block) |
+| `faction_joins` | FactionJoined events |
+| `rallies` | RallyPlaced events |
+| `captures` | TerritoryCaptured events |
+| `defections` | Defected events |
+| `match_events` | MatchEventPushed events |
+| `reward_claims` | RewardClaimed events |
+| `season_settled` | SeasonSettled events |
+| `contributions` | Per-user per-region per-faction aggregated contribution totals (maintained incrementally on each rally via UPSERT) |
+| `stats` | Persisted global statistics snapshot (refreshed every ~10 poll cycles by the indexer) |
+
 ### REST API
 
 | Endpoint | Description |
@@ -314,13 +329,14 @@ npm run dev
 
 ## War Correspondent (Auto-Tweet Agent)
 
-The correspondent (`apps/correspondent/`) monitors three on-chain events and auto-posts war dispatches to X:
+The correspondent (`apps/correspondent/`) monitors four on-chain events and auto-posts war dispatches to X:
 
 | Event | What gets tweeted |
 |-------|-------------------|
 | `TerritoryCaptured` | `"⚔️ 🇧🇷 Brazil just seized Region #5 from 🇦🇷 Argentina!"` |
 | `Defected` | `"🗡️ BETRAYAL! A former 🇫🇷 France supporter defected to 🇩🇪 Germany"` |
 | `MatchEventPushed` | `"⚽ GOAL! 🇪🇸 Spain — Power surge across 3 regions!"` |
+| `FactionJoined` | `"⚔️ WELCOME, WARRIOR! 0xA1...cE has joined 🇧🇷 Brazil!"` (new join) or `"🔄 FACTION SWITCH! 0xA1...cE switched to 🇩🇪 Germany"` (switch) |
 | **Countdown** (daily) | `"📅 19 days until kickoff! Current Territory Leaderboard: 🥇 Brazil: 35 territories..."` |
 
 Each tweet includes OKLink transaction proof, `@0xWangyangming @aspect_build #TIFO #XLayer` tags, and 3 randomized template variants for variety (including countdown tweets).

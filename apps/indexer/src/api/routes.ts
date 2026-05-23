@@ -447,25 +447,60 @@ router.get('/stats', async (_req: Request, res: Response) => {
 
     const blockNumber = await client.getBlockNumber();
 
-    // Indexed stats
-    const totalRallies = await query(`SELECT COUNT(*) as count FROM rallies`);
-    const totalCaptures = await query(`SELECT COUNT(*) as count FROM captures`);
-    const totalDefections = await query(`SELECT COUNT(*) as count FROM defections`);
-    const totalMatchEvents = await query(`SELECT COUNT(*) as count FROM match_events`);
-    const totalFactionJoins = await query(`SELECT COUNT(*) as count FROM faction_joins`);
-    const totalRewardClaims = await query(`SELECT COUNT(*) as count FROM reward_claims`);
+    // Try fast path: read from persisted stats table
+    const cachedStats = await query(`SELECT key, value FROM stats`);
+    const statsMap: Record<string, string> = {};
+    for (const row of cachedStats.rows) {
+      statsMap[row.key] = row.value;
+    }
 
-    const uniqueUsers = await query(
-      `SELECT COUNT(DISTINCT user_address) as count FROM (
-        SELECT user_address FROM rallies
-        UNION
-        SELECT user_address FROM faction_joins
-       ) combined`
-    );
+    // Fall back to live aggregation if persisted stats are empty or stale
+    const useCached = statsMap['last_stats_refresh'] && parseInt(statsMap['last_stats_refresh']) > 0;
 
-    const activeFactions = await query(
-      `SELECT COUNT(DISTINCT faction_id) as count FROM faction_joins`
-    );
+    let totals;
+    if (useCached) {
+      totals = {
+        rallies: parseInt(statsMap['total_rallies'] || '0'),
+        captures: parseInt(statsMap['total_captures'] || '0'),
+        defections: parseInt(statsMap['total_defections'] || '0'),
+        matchEvents: parseInt(statsMap['total_match_events'] || '0'),
+        factionJoins: parseInt(statsMap['total_faction_joins'] || '0'),
+        rewardClaims: parseInt(statsMap['total_reward_claims'] || '0'),
+        uniqueUsers: parseInt(statsMap['unique_users'] || '0'),
+        activeFactions: parseInt(statsMap['active_factions'] || '0'),
+      };
+    } else {
+      // Live aggregation fallback
+      const totalRallies = await query(`SELECT COUNT(*) as count FROM rallies`);
+      const totalCaptures = await query(`SELECT COUNT(*) as count FROM captures`);
+      const totalDefections = await query(`SELECT COUNT(*) as count FROM defections`);
+      const totalMatchEvents = await query(`SELECT COUNT(*) as count FROM match_events`);
+      const totalFactionJoins = await query(`SELECT COUNT(*) as count FROM faction_joins`);
+      const totalRewardClaims = await query(`SELECT COUNT(*) as count FROM reward_claims`);
+
+      const uniqueUsers = await query(
+        `SELECT COUNT(DISTINCT user_address) as count FROM (
+          SELECT user_address FROM rallies
+          UNION
+          SELECT user_address FROM faction_joins
+         ) combined`
+      );
+
+      const activeFactions = await query(
+        `SELECT COUNT(DISTINCT faction_id) as count FROM faction_joins`
+      );
+
+      totals = {
+        rallies: parseInt(totalRallies.rows[0].count),
+        captures: parseInt(totalCaptures.rows[0].count),
+        defections: parseInt(totalDefections.rows[0].count),
+        matchEvents: parseInt(totalMatchEvents.rows[0].count),
+        factionJoins: parseInt(totalFactionJoins.rows[0].count),
+        rewardClaims: parseInt(totalRewardClaims.rows[0].count),
+        uniqueUsers: parseInt(uniqueUsers.rows[0].count),
+        activeFactions: parseInt(activeFactions.rows[0].count),
+      };
+    }
 
     // Most contested regions
     const mostContested = await query(
@@ -500,16 +535,7 @@ router.get('/stats', async (_req: Request, res: Response) => {
         lastIndexedBlock: lastIndexed.rows[0]?.value || '0',
         regionCount: Number(regionCount),
       },
-      totals: {
-        rallies: parseInt(totalRallies.rows[0].count),
-        captures: parseInt(totalCaptures.rows[0].count),
-        defections: parseInt(totalDefections.rows[0].count),
-        matchEvents: parseInt(totalMatchEvents.rows[0].count),
-        factionJoins: parseInt(totalFactionJoins.rows[0].count),
-        rewardClaims: parseInt(totalRewardClaims.rows[0].count),
-        uniqueUsers: parseInt(uniqueUsers.rows[0].count),
-        activeFactions: parseInt(activeFactions.rows[0].count),
-      },
+      totals,
       seasonSettled: parseInt(seasonSettled.rows[0].count) > 0,
       mostContestedRegions: mostContested.rows.map((r) => ({
         regionId: r.region_id,
