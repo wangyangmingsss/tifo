@@ -71,11 +71,11 @@ contract SeedMap is Script {
         a[11] = 111; // NED -> '528'
         a[12] =  38; // CRO -> '191'
         a[13] =  12; // BEL -> '056'
-        a[14] =  78; // ITA -> '380'
+        a[14] =  15; // BIH -> '070' (Bosnia and Herzegovina)
         a[15] = 151; // SUI -> '756'
         a[16] =   8; // AUT -> '040'
         a[17] = 118; // NOR -> '578'
-        a[18] = 125; // POL -> '616'
+        a[18] = 150; // SWE -> '752' (Sweden)
         a[19] =  41; // CZE -> '203'
         // CONCACAF (20-24)
         a[20] = 167; // USA -> '840'
@@ -89,7 +89,7 @@ contract SeedMap is Script {
         a[27] =  62; // GHA -> '288'
         a[28] = 142; // RSA -> '710'
         a[29] =  79; // CIV -> '384'
-        a[30] = 117; // NGA -> '566'
+        a[30] = 178; // SCO -> Scotland (reserved slot, GBR shared with ENG)
         a[31] =   3; // ALG -> '012'
         a[32] = 164; // EGY -> '818'
         a[33] = 177; // CPV -> '132' (reserved slot, not in 110m)
@@ -106,7 +106,7 @@ contract SeedMap is Script {
         a[43] =  75; // IRQ -> '368'
         // OFC + misc (44-47)
         a[44] = 114; // NZL -> '554'
-        a[45] =  80; // JAM -> '388'
+        a[45] = 179; // CUR -> Curaçao (reserved slot, not in 110m)
         a[46] = 159; // TUR -> '792'
         a[47] = 158; // TUN -> '788'
     }

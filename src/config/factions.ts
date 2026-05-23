@@ -25,11 +25,11 @@ export const FACTIONS: Faction[] = [
   { id: 11, code: 'NED', name: 'Netherlands',         nameZh: '荷兰',       confederation: 'UEFA',     anchor: 'NL', color: '#FF6600' },
   { id: 12, code: 'CRO', name: 'Croatia',             nameZh: '克罗地亚',   confederation: 'UEFA',     anchor: 'HR', color: '#FF0000' },
   { id: 13, code: 'BEL', name: 'Belgium',             nameZh: '比利时',     confederation: 'UEFA',     anchor: 'BE', color: '#ED2939' },
-  { id: 14, code: 'ITA', name: 'Italy',               nameZh: '意大利',     confederation: 'UEFA',     anchor: 'IT', color: '#0066B2' },
+  { id: 14, code: 'BIH', name: 'Bosnia and Herzegovina', nameZh: '波黑',       confederation: 'UEFA',     anchor: 'BA', color: '#002395' },
   { id: 15, code: 'SUI', name: 'Switzerland',         nameZh: '瑞士',       confederation: 'UEFA',     anchor: 'CH', color: '#D52B1E' },
   { id: 16, code: 'AUT', name: 'Austria',             nameZh: '奥地利',     confederation: 'UEFA',     anchor: 'AT', color: '#C8102E' },
   { id: 17, code: 'NOR', name: 'Norway',              nameZh: '挪威',       confederation: 'UEFA',     anchor: 'NO', color: '#BA0C2F' },
-  { id: 18, code: 'POL', name: 'Poland',              nameZh: '波兰',       confederation: 'UEFA',     anchor: 'PL', color: '#DC143C' },
+  { id: 18, code: 'SWE', name: 'Sweden',              nameZh: '瑞典',       confederation: 'UEFA',     anchor: 'SE', color: '#006AA7' },
   { id: 19, code: 'CZE', name: 'Czech Republic',      nameZh: '捷克',       confederation: 'UEFA',     anchor: 'CZ', color: '#11457E' },
   // 20-24: CONCACAF
   { id: 20, code: 'USA', name: 'United States',       nameZh: '美国',       confederation: 'CONCACAF', anchor: 'US', color: '#3C3B6E' },
@@ -43,7 +43,7 @@ export const FACTIONS: Faction[] = [
   { id: 27, code: 'GHA', name: 'Ghana',               nameZh: '加纳',       confederation: 'CAF',      anchor: 'GH', color: '#006B3F' },
   { id: 28, code: 'RSA', name: 'South Africa',        nameZh: '南非',       confederation: 'CAF',      anchor: 'ZA', color: '#007749' },
   { id: 29, code: 'CIV', name: "Cote d'Ivoire",      nameZh: '科特迪瓦',   confederation: 'CAF',      anchor: 'CI', color: '#F77F00' },
-  { id: 30, code: 'NGA', name: 'Nigeria',             nameZh: '尼日利亚',   confederation: 'CAF',      anchor: 'NG', color: '#008751' },
+  { id: 30, code: 'SCO', name: 'Scotland',            nameZh: '苏格兰',     confederation: 'UEFA',     anchor: 'GB', color: '#003078' },
   { id: 31, code: 'ALG', name: 'Algeria',             nameZh: '阿尔及利亚', confederation: 'CAF',      anchor: 'DZ', color: '#006233' },
   { id: 32, code: 'EGY', name: 'Egypt',               nameZh: '埃及',       confederation: 'CAF',      anchor: 'EG', color: '#C8102E' },
   { id: 33, code: 'CPV', name: 'Cape Verde',          nameZh: '佛得角',     confederation: 'CAF',      anchor: 'CV', color: '#003893' },
@@ -61,7 +61,7 @@ export const FACTIONS: Faction[] = [
   // 44: OFC
   { id: 44, code: 'NZL', name: 'New Zealand',         nameZh: '新西兰',     confederation: 'OFC',      anchor: 'NZ', color: '#1A1A1A' },
   // 45: CONCACAF
-  { id: 45, code: 'JAM', name: 'Jamaica',             nameZh: '牙买加',     confederation: 'CONCACAF', anchor: 'JM', color: '#009B3A' },
+  { id: 45, code: 'CUR', name: 'Curacao',             nameZh: '库拉索',     confederation: 'CONCACAF', anchor: 'CW', color: '#002B7F' },
   // 46: UEFA
   { id: 46, code: 'TUR', name: 'Turkey',              nameZh: '土耳其',     confederation: 'UEFA',     anchor: 'TR', color: '#E30A17' },
   // 47: CAF

@@ -76,11 +76,11 @@ const FACTION_ANCHOR_COUNTRY_IDS: string[] = [
   '528', // 11 NLD - Netherlands
   '191', // 12 HRV - Croatia
   '056', // 13 BEL - Belgium
-  '380', // 14 ITA - Italy
+  '070', // 14 BIH - Bosnia and Herzegovina
   '756', // 15 CHE - Switzerland
   '040', // 16 AUT - Austria
   '578', // 17 NOR - Norway
-  '616', // 18 POL - Poland
+  '752', // 18 SWE - Sweden
   '203', // 19 CZE - Czechia
 
   // North / Central America (20-24)
@@ -96,7 +96,7 @@ const FACTION_ANCHOR_COUNTRY_IDS: string[] = [
   '288', // 27 GHA - Ghana
   '710', // 28 ZAF - South Africa
   '384', // 29 CIV - Ivory Coast
-  '566', // 30 NGA - Nigeria
+  '826', // 30 SCO - Scotland (shares GBR with England; uses reserved region 178)
   '012', // 31 DZA - Algeria
   '818', // 32 EGY - Egypt
   '132', // 33 CPV - Cape Verde  (not in 110m; assigned region 177)
@@ -115,7 +115,7 @@ const FACTION_ANCHOR_COUNTRY_IDS: string[] = [
 
   // Other (44-47)
   '554', // 44 NZL - New Zealand
-  '388', // 45 JAM - Jamaica
+  '531', // 45 CUR - Curaçao (not in 110m; uses reserved region 179)
   '792', // 46 TUR - Turkey
   '788', // 47 TUN - Tunisia
 ];
@@ -126,10 +126,26 @@ if (!(countryToRegionId['132'] >= 0)) {
   regionIdToCountry[177] = '132';
 }
 
+// Scotland (826-SCO) shares ISO numeric with England (GBR); assign reserved slot 178.
+// This allows Scotland to have its own distinct region on the map.
+countryToRegionId['826-SCO'] = 178;
+regionIdToCountry[178] = '826-SCO';
+
+// Curaçao (531) is not present in 110m; assign reserved slot 179.
+if (!(countryToRegionId['531'] >= 0)) {
+  countryToRegionId['531'] = 179;
+  regionIdToCountry[179] = '531';
+}
+
 export const factionAnchorRegions: Record<number, number> = {};
 FACTION_ANCHOR_COUNTRY_IDS.forEach((countryId, factionId) => {
   factionAnchorRegions[factionId] = countryToRegionId[countryId];
 });
+
+// Override: Scotland (faction 30) uses reserved region 178 instead of 826 (shared with England)
+factionAnchorRegions[30] = 178;
+// Override: Curaçao (faction 45) uses reserved region 179
+factionAnchorRegions[45] = 179;
 
 // ---------------------------------------------------------------------------
 // Country name lookup (basic, covers faction anchors + major countries)
@@ -303,6 +319,7 @@ const COUNTRY_NAMES: Record<string, string> = {
   '807': 'North Macedonia',
   '818': 'Egypt',
   '826': 'United Kingdom',
+  '826-SCO': 'Scotland',
   '834': 'Tanzania',
   '840': 'United States of America',
   '854': 'Burkina Faso',
@@ -311,6 +328,8 @@ const COUNTRY_NAMES: Record<string, string> = {
   '862': 'Venezuela',
   '887': 'Yemen',
   '894': 'Zambia',
+  // Reserved entries (not in 110m but used as faction anchors)
+  '531': 'Curacao',
 };
 
 export function getCountryName(numericId: string): string {
