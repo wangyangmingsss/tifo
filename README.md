@@ -68,6 +68,11 @@ tifo/
 │   │   ├── WarChest.sol              # Prize pool & season settlement
 │   │   ├── MatchOracle.sol           # Match event → map boost bridge
 │   │   ├── MockUSDT.sol              # Testnet token with faucet
+│   │   ├── interfaces/               # Extracted interface definitions
+│   │   │   ├── IFactionRegistry.sol  # Faction read interface (used by TerritoryMap)
+│   │   │   ├── IWarChestBump.sol     # Rally → WarChest callback interface
+│   │   │   ├── ITerritoryMapBoost.sol # MatchOracle → map boost interface
+│   │   │   └── ITerritoryMapView.sol # WarChest → map view interface
 │   │   └── libraries/
 │   │       ├── TifoTypes.sol         # Constants + custom errors
 │   │       └── PowerMath.sol         # Decay + underdog bonus pure functions
@@ -78,81 +83,59 @@ tifo/
 │   │   ├── FundFans.s.sol            # Pre-fund burner wallets with MockUSDT + OKB gas
 │   │   └── SimulateWar.s.sol         # Dense simulation for grading window
 │   └── deployments/xlayer-testnet.json
-├── packages/                     # Shared packages (single source of truth)
-│   ├── config/
-│   │   ├── factions.config.js        # 48 faction definitions (id, code, name, color, anchor, anchorISO)
-│   │   └── package.json              # @tifo/config
-│   └── abi/
-│       ├── TerritoryMap.json         # Superset ABI (functions + events)
-│       ├── FactionRegistry.json
-│       ├── WarChest.json
-│       ├── MatchOracle.json
-│       ├── MockUSDT.json
-│       ├── index.js                  # CommonJS re-export of all ABIs
-│       └── package.json              # @tifo/abi
-├── src/                          # Next.js 14 App Router frontend
-│   │   ├── Deploy.s.sol              # Full deployment + wiring
-│   │   ├── SeedMap.s.sol             # Genesis anchor seeding (48 factions)
-│   │   └── SimulateWar.s.sol         # Dense simulation for grading window
-│   └── deployments/xlayer-testnet.json
-├── src/                          # Next.js 14 App Router frontend
-│   ├── app/
-│   │   ├── page.tsx                  # Landing page: hero + live stats (Indexer API) + CTA
-│   │   ├── map/page.tsx              # Interactive real-time world map (on-chain getMapState)
-│   │   ├── rally/[regionId]/page.tsx # Rally panel: slider + underdog preview + gas cost badge
-│   │   ├── faction/[id]/
-│   │   │   ├── page.tsx              # Faction details: territories, prize pool, real contributors
-│   │   │   ├── layout.tsx            # Dynamic metadata + OG tags
-│   │   │   └── opengraph-image.tsx   # Dynamic 1200×630 OG image (live stats from Indexer)
-│   │   ├── me/
-│   │   │   ├── page.tsx              # My war record: faction, contributions, gas cost display
-│   │   │   └── opengraph-image.tsx   # Dynamic OG image (live rally/capture counts)
-│   │   ├── leaderboard/page.tsx      # 48-faction real-time territory rankings
-│   │   └── api/
-│   │       ├── okx-price/route.ts    # OKX price proxy (DEX quote + public ticker fallback)
-│   │       └── okx-dex-quote/route.ts # OKX DEX Aggregator swap quote (HMAC authenticated)
-│   ├── components/
-│   │   ├── WorldMap.tsx              # D3-geo + TopoJSON map with faction coloring
-│   │   ├── WorldMapPreview.tsx       # Mini map preview for homepage hero
-│   │   ├── RegionSidebar.tsx         # Region detail panel + real capture history from Indexer
-│   │   ├── MapLegend.tsx             # Faction territory leaderboard overlay
-│   │   ├── StatsCounter.tsx          # Animated counter with IntersectionObserver
-│   │   ├── GasCostBadge.tsx          # Estimated gas cost in USD (OKX price API)
-│   │   └── Navbar.tsx                # Navigation + RainbowKit wallet connect
-│   ├── hooks/
-│   │   └── useOkbPrice.ts            # OKB/USDT price hook (60s cache)
-│   ├── config/
-│   │   ├── factions.ts               # 48 faction definitions (colors, names, anchors)
-│   │   ├── contracts.ts              # Contract addresses + chain config + OKLink helpers
-│   │   ├── regionMapping.ts          # ISO 3166-1 → region ID mapping (177 countries)
-│   │   ├── wagmi.ts                  # Wagmi/RainbowKit provider config
-│   │   └── abi/                      # Contract ABIs (TerritoryMap, FactionRegistry, MockUSDT, WarChest)
-│   └── providers/
-│       └── Web3Provider.tsx          # WagmiProvider + QueryClient + RainbowKit
-├── public/
-│   └── data/
-│       ├── countries-110m.json       # World TopoJSON (overview, 177 countries)
-│       └── countries-50m.json        # World TopoJSON (detail, 241 countries)
-├── docs/
-│   ├── PITCH.md                      # One-page pitch for judges
-│   └── ARCHITECTURE.md              # System architecture overview
 ├── apps/
+│   ├── web/                          # Next.js 14 App Router frontend
+│   │   ├── src/
+│   │   │   ├── app/
+│   │   │   │   ├── page.tsx              # Landing page: hero + live stats + CTA
+│   │   │   │   ├── map/page.tsx          # Interactive real-time world map
+│   │   │   │   ├── rally/[regionId]/page.tsx # Rally panel: slider + underdog preview
+│   │   │   │   ├── faction/[id]/         # Faction details + dynamic OG images
+│   │   │   │   ├── me/                   # War record + dynamic OG images
+│   │   │   │   ├── leaderboard/page.tsx  # 48-faction real-time rankings
+│   │   │   │   └── api/
+│   │   │   │       ├── okx-price/route.ts     # OKX price (DEX quote + public fallback)
+│   │   │   │       └── okx-dex-quote/route.ts # OKX DEX Aggregator (HMAC authenticated)
+│   │   │   ├── components/           # WorldMap, RegionSidebar, GasCostBadge, etc.
+│   │   │   ├── hooks/useOkbPrice.ts  # OKB/USDT price hook (60s cache)
+│   │   │   ├── config/               # wagmi, contracts, factions, regionMapping, ABIs
+│   │   │   └── providers/Web3Provider.tsx
+│   │   ├── public/data/              # World TopoJSON (110m + 50m)
+│   │   ├── e2e/                      # Playwright E2E tests (6 suites, 20 cases)
+│   │   │   ├── landing.spec.ts       # Landing page load + hero + stats
+│   │   │   ├── faction.spec.ts       # Faction selection + detail pages
+│   │   │   ├── map.spec.ts           # Map rendering + region interaction
+│   │   │   ├── rally.spec.ts         # Rally signing flow + commit slider
+│   │   │   ├── verifiability.spec.ts # OKLink proof links + region history
+│   │   │   └── mobile.spec.ts        # Mobile viewport responsiveness
+│   │   ├── playwright.config.ts      # Playwright config (Chrome + mobile Safari)
+│   │   └── package.json              # @tifo/web
 │   ├── indexer/                      # On-chain event indexer + REST API
 │   │   ├── src/
 │   │   │   ├── index.ts              # Entry: DB init + API server + indexer
-│   │   │   ├── abis/                 # Contract ABI definitions
 │   │   │   ├── db/schema.sql         # PostgreSQL schema (8 tables)
 │   │   │   ├── indexer/              # viem polling (5-block buffer) + handlers
-│   │   │   └── api/routes.ts         # REST: /map/state, /region/:id/history, /leaderboard, /faction/:id, /stats
+│   │   │   └── api/routes.ts         # REST: /map/state, /region/:id/history, etc.
 │   │   └── package.json
 │   └── correspondent/                # War Correspondent — auto-tweet agent
 │       ├── src/
 │       │   ├── index.ts              # Entry point
-│       │   ├── factions.ts           # 48 faction names + flag emojis
-│       │   ├── templates.ts          # Tweet generators (3 variants per event)
+│       │   ├── correspondent.ts      # Event polling + countdown dispatch
+│       │   ├── templates.ts          # Tweet generators (3 variants + countdown)
 │       │   ├── twitter.ts            # X API v2 OAuth 1.0a client (zero SDK)
-│       │   └── correspondent.ts      # viem event polling + dispatch logic
+│       │   └── factions.ts           # 48 faction names + flag emojis
 │       └── package.json
+├── packages/                         # Shared packages
+│   ├── config/factions.config.js     # 48 faction definitions (single source of truth)
+│   └── abi/                          # Contract ABIs (CommonJS)
+├── docs/
+│   ├── PITCH.md                      # One-page pitch for judges
+│   └── ARCHITECTURE.md               # System architecture overview
+├── deploy/
+│   ├── setup-server.sh               # Bare-metal server setup
+│   └── deploy-web.sh                 # Frontend deployment script
+├── docker-compose.yml
+├── package.json                      # Workspace root (apps/*, packages/*)
 └── README.md
 ```
 
@@ -335,6 +318,7 @@ npm start     # live mode — posts to X
 
 ```bash
 # Install dependencies
+cd apps/web
 npm install
 
 # Copy environment template
@@ -348,6 +332,26 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) to see the territory map.
+
+### E2E Tests (Playwright)
+
+```bash
+cd apps/web
+
+# Install Playwright browsers (first time only)
+npx playwright install
+
+# Run all E2E tests (headless)
+npm run test:e2e
+
+# Run with browser visible
+npm run test:e2e:headed
+
+# Interactive UI mode
+npm run test:e2e:ui
+```
+
+6 test suites covering: landing page, faction selection, map rendering, rally flow, verifiability panel (OKLink links), and mobile layout responsiveness. Tests run on Desktop Chrome and mobile Safari viewports.
 
 ### Smart Contracts
 
