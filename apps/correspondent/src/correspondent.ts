@@ -12,7 +12,7 @@ import { config } from './config';
 import { publishTweet } from './twitter';
 import { tweetTerritoryCaptured, tweetDefected, tweetMatchEvent, tweetCountdown } from './templates';
 import { getFaction } from './factions';
-import { enhanceTweet } from './deepseek';
+import { enhanceTweet, generateTweetFromData } from './deepseek';
 
 // ── ABIs (only events we care about) ──────────────────────────────
 
@@ -151,6 +151,7 @@ export class Correspondent {
     if (!kind) return;
 
     let tweetText: string;
+    let eventData: { type: 'capture' | 'defection' | 'match_event' | 'countdown'; details: Record<string, unknown> } | undefined;
 
     try {
       switch (kind) {
@@ -168,6 +169,16 @@ export class Correspondent {
             captureCount: decoded.args.captureCount,
             txHash: log.transactionHash!,
           });
+          eventData = {
+            type: 'capture',
+            details: {
+              regionId: decoded.args.regionId,
+              oldFaction: getFaction(decoded.args.oldFaction).name,
+              newFaction: getFaction(decoded.args.newFaction).name,
+              captureCount: decoded.args.captureCount,
+              txHash: log.transactionHash,
+            },
+          };
           break;
         }
         case 'Defected': {
@@ -184,6 +195,16 @@ export class Correspondent {
             toFaction: decoded.args.toFaction,
             txHash: log.transactionHash!,
           });
+          eventData = {
+            type: 'defection',
+            details: {
+              user: decoded.args.user,
+              regionId: decoded.args.regionId,
+              fromFaction: getFaction(decoded.args.fromFaction).name,
+              toFaction: getFaction(decoded.args.toFaction).name,
+              txHash: log.transactionHash,
+            },
+          };
           break;
         }
         case 'MatchEventPushed': {
@@ -201,6 +222,17 @@ export class Correspondent {
             boostApplied: decoded.args.boostApplied.toString(),
             txHash: log.transactionHash!,
           });
+          eventData = {
+            type: 'match_event',
+            details: {
+              eventId: Number(decoded.args.eventId),
+              faction: getFaction(decoded.args.faction).name,
+              eventType: decoded.args.eventType,
+              regions: decoded.args.regions.map(Number),
+              boostApplied: decoded.args.boostApplied.toString(),
+              txHash: log.transactionHash,
+            },
+          };
           break;
         }
         default:
@@ -221,8 +253,9 @@ export class Correspondent {
     this.tweetCount++;
     console.log(`[correspondent] Event: ${kind} at block ${log.blockNumber} — generating tweet #${this.tweetCount}`);
 
-    // Optionally enhance with DeepSeek AI before posting
-    const finalText = await enhanceTweet(tweetText);
+    // AI-powered tweet generation (primary: generate from scratch, fallback: enhance template)
+    const aiGenerated = await generateTweetFromData(eventData!, tweetText);
+    const finalText = aiGenerated !== tweetText ? aiGenerated : await enhanceTweet(tweetText);
     await publishTweet(finalText);
   }
 
@@ -266,8 +299,16 @@ export class Correspondent {
 
       const text = tweetCountdown({ daysUntilKickoff, top3: ranked });
 
-      // Optionally enhance with DeepSeek AI
-      const finalText = await enhanceTweet(text);
+      // AI-powered tweet generation (primary: generate from scratch, fallback: enhance template)
+      const countdownEventData = {
+        type: 'countdown' as const,
+        details: {
+          daysUntilKickoff,
+          top3: ranked,
+        },
+      };
+      const aiGenerated = await generateTweetFromData(countdownEventData, text);
+      const finalText = aiGenerated !== text ? aiGenerated : await enhanceTweet(text);
 
       this.rateLimiter.record();
       this.tweetCount++;

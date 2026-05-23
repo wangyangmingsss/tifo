@@ -149,6 +149,10 @@ export default function RegionSidebar({ regionId, ownerFactionId, onClose }: Reg
   const canShowDefect = isConnected && isEnrolled && ownerFactionId !== NO_FACTION
     && userFactionId !== undefined && userFactionId === ownerFactionId;
 
+  // Show defection opportunity prompt when user is connected & enrolled but NOT in owner faction
+  const canShowDefectPrompt = isConnected && isEnrolled && ownerFactionId !== NO_FACTION
+    && userFactionId !== undefined && userFactionId !== ownerFactionId;
+
   // ── Defect transaction ──────────────────────────────────────────────────────
   const { writeContract: doDefect, data: defectHash, isPending: defectPending, error: defectError, reset: resetDefect } = useWriteContract();
   const { isLoading: defectConfirming, isSuccess: defectSuccess } = useWaitForTransactionReceipt({ hash: defectHash });
@@ -371,12 +375,44 @@ export default function RegionSidebar({ regionId, ownerFactionId, onClose }: Reg
                         View on OKLink &rarr;
                       </a>
                     )}
+                    <p className="mt-2 text-xs text-gray-500 italic">
+                      Defection is TIFO&apos;s social warfare mechanic &mdash; betray your old faction for profit.
+                    </p>
                   </div>
                 </div>
               </div>
             </div>
           )}
-          </div>
+
+          {/* Defection Opportunity — prompt for users NOT in the owner faction */}
+          {canShowDefectPrompt && (
+            <div className="p-4 border-b border-gray-700/30">
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-xl flex-shrink-0">{'\u{1F5E1}\uFE0F'}</span>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-bold text-amber-400 mb-1">Defection Opportunity</h4>
+                    <p className="text-xs text-gray-400 mb-3">
+                      This region is held by{' '}
+                      <span className="font-semibold" style={{ color: ownerFaction?.color }}>
+                        {ownerFaction?.name}
+                      </span>
+                      . Switch to their faction to convert your old contributions into power and earn a 20% finder&apos;s reward.
+                    </p>
+                    <a
+                      href="/me"
+                      className="inline-flex items-center gap-1 text-sm font-semibold text-amber-400 hover:text-amber-300 transition-colors"
+                    >
+                      Switch Faction &rarr;
+                    </a>
+                    <p className="mt-2 text-xs text-gray-500 italic">
+                      Defection is TIFO&apos;s social warfare mechanic &mdash; betray your old faction for profit.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Capture count */}
           <div className="px-4 py-3 border-b border-gray-700/30">
@@ -448,6 +484,8 @@ export default function RegionSidebar({ regionId, ownerFactionId, onClose }: Reg
             </div>
           </div>
         </div>
+        {/* end scrollable content */}
+
       </div>
     </div>
   );

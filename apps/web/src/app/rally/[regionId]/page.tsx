@@ -279,6 +279,10 @@ export default function RallyPage({ params }: { params: { regionId: string } }) 
   const canShowDefect = isConnected && enrolled && ownerFactionId !== NO_FACTION
     && userFactionId !== undefined && Number(userFactionId) === ownerFactionId;
 
+  // Show defection opportunity prompt when user is connected & enrolled but NOT in owner faction
+  const canShowDefectPrompt = isConnected && enrolled && ownerFactionId !== NO_FACTION
+    && userFactionId !== undefined && Number(userFactionId) !== ownerFactionId;
+
   const handleDefect = () => {
     resetDefect();
     doDefect({
@@ -578,6 +582,36 @@ export default function RallyPage({ params }: { params: { regionId: string } }) 
                         View defection on OKLink &rarr;
                       </a>
                     )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Defection Opportunity — prompt for users NOT in the owner faction */}
+            {canShowDefectPrompt && (
+              <div className="rounded-2xl border border-amber-500/30 bg-amber-950/20 p-6">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl flex-shrink-0">{'\u{1F5E1}\uFE0F'}</span>
+                  <div className="flex-1">
+                    <h3 className="text-base font-bold text-amber-400 mb-1">Defection Opportunity</h3>
+                    <p className="text-sm text-gray-400 mb-4">
+                      <span className="font-semibold" style={{ color: ownerFaction?.color }}>
+                        {ownerFaction?.name}
+                      </span>{' '}
+                      holds this region. If you previously rallied here under a different faction,
+                      you can switch to{' '}
+                      <span className="font-semibold" style={{ color: ownerFaction?.color }}>
+                        {ownerFaction?.name}
+                      </span>{' '}
+                      and defect &mdash; converting 80% of your old contribution into their power,
+                      with 20% as your finder&apos;s reward.
+                    </p>
+                    <a
+                      href="/me"
+                      className="inline-flex items-center gap-1 text-sm font-bold text-amber-400 hover:text-amber-300 transition-colors"
+                    >
+                      Switch Faction on Profile &rarr;
+                    </a>
                   </div>
                 </div>
               </div>

@@ -131,4 +131,105 @@ contract TifoForkTest is Test {
         assertEq(token.symbol(), "mUSDT");
         assertEq(token.decimals(), 18);
     }
+
+    // ── 5. Additional wiring verification ───────────────────────────────
+
+    function test_Fork_MapWiredToRegistry() public view {
+        // TerritoryMap.registry() should point to FactionRegistry
+        address wiredRegistry = address(map.registry());
+        assertEq(wiredRegistry, REGISTRY_ADDR, "TerritoryMap.registry != FactionRegistry");
+    }
+
+    function test_Fork_WarChestUpdaterWired() public view {
+        // WarChest.updater() should be TerritoryMap (for bumpContribTotal callback)
+        assertEq(chest.updater(), MAP_ADDR, "WarChest.updater != TerritoryMap");
+    }
+
+    function test_Fork_WarChestTokenIsUSDT() public view {
+        // WarChest.token() should point to MockUSDT
+        assertEq(chest.token(), USDT_ADDR, "WarChest.token != MockUSDT");
+    }
+
+    function test_Fork_RegistryWiredToChest() public view {
+        // FactionRegistry.warChest() should point to WarChest
+        assertEq(registry.warChest(), CHEST_ADDR, "FactionRegistry.warChest != WarChest");
+    }
+
+    // ── 6. Defect flow on fork ──────────────────────────────────────────
+
+    function test_Fork_DefectFlowAfterCapture() public {
+        address fan1 = address(0xD1);
+        address fan2 = address(0xD2);
+        uint16 targetRegion = 198;
+        uint8 faction0 = 0;
+        uint8 faction1 = 1;
+
+        // ── fan1: join faction 0, rally region 198 ──
+        vm.startPrank(fan1);
+        token.faucet();
+        token.approve(MAP_ADDR, type(uint256).max);
+        token.approve(REGISTRY_ADDR, type(uint256).max);
+        registry.joinFaction(faction0);
+        map.rally(targetRegion, 500e18);
+        uint256 fan1ContribF0 = map.contribution(targetRegion, faction0, fan1);
+        assertGt(fan1ContribF0, 0, "fan1 contribution under faction0 should be > 0");
+        vm.stopPrank();
+
+        // ── fan2: join faction 1, overwhelm region 198 to capture it ──
+        vm.startPrank(fan2);
+        token.faucet();
+        token.approve(MAP_ADDR, type(uint256).max);
+        token.approve(REGISTRY_ADDR, type(uint256).max);
+        registry.joinFaction(faction1);
+        // Rally a large amount to guarantee capture
+        map.rally(targetRegion, 5_000e18);
+        vm.stopPrank();
+
+        // Verify faction 1 now owns the region
+        (uint8 ownerFaction,,) = map.regions(targetRegion);
+        assertEq(ownerFaction, faction1, "Faction 1 should own region after overwhelming rally");
+
+        // ── fan1: switch to faction 1 and defect ──
+        vm.startPrank(fan1);
+        registry.joinFaction(faction1);
+        assertEq(registry.factionOf(fan1), faction1, "fan1 should now be in faction 1");
+
+        map.defect(targetRegion);
+
+        // After defection: contribution under old faction should be zeroed
+        uint256 fan1ContribF0After = map.contribution(targetRegion, faction0, fan1);
+        assertEq(fan1ContribF0After, 0, "Contribution under old faction should be zeroed after defect");
+
+        // Contribution under new faction should be > 0 (finder's reward credit)
+        uint256 fan1ContribF1 = map.contribution(targetRegion, faction1, fan1);
+        assertGt(fan1ContribF1, 0, "Contribution under new faction should be > 0 after defect");
+        vm.stopPrank();
+    }
+
+    // ── 7. Effective power decay over time ──────────────────────────────
+
+    function test_Fork_EffectivePowerDecays() public {
+        address decayFan = address(0xDE);
+        uint16 decayRegion = 197;
+        uint8 decayFaction = 2;
+
+        // Rally to inject power into the region
+        vm.startPrank(decayFan);
+        token.faucet();
+        token.approve(MAP_ADDR, type(uint256).max);
+        token.approve(REGISTRY_ADDR, type(uint256).max);
+        registry.joinFaction(decayFaction);
+        map.rally(decayRegion, 1_000e18);
+        vm.stopPrank();
+
+        // Read effective power immediately after rally
+        uint256 powerBefore = map.effectivePower(decayRegion, decayFaction);
+        assertGt(powerBefore, 0, "Power should be > 0 after rally");
+
+        // Warp forward 2 hours -- decay should reduce power
+        vm.warp(block.timestamp + 2 hours);
+
+        uint256 powerAfter = map.effectivePower(decayRegion, decayFaction);
+        assertLt(powerAfter, powerBefore, "Effective power should decrease after time passes");
+    }
 }

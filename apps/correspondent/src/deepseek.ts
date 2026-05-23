@@ -91,3 +91,81 @@ export async function enhanceTweet(templateText: string): Promise<string> {
     return templateText;
   }
 }
+
+/**
+ * Generate a tweet entirely from structured event data using DeepSeek.
+ * This produces more natural, varied tweets compared to template-based generation.
+ * Falls back to the provided fallback text if AI is unavailable.
+ */
+export async function generateTweetFromData(
+  eventData: {
+    type: 'capture' | 'defection' | 'match_event' | 'countdown';
+    details: Record<string, unknown>;
+  },
+  fallbackText: string,
+): Promise<string> {
+  const apiKey = config.deepseekApiKey;
+  if (!apiKey) return fallbackText;
+
+  const GENERATE_PROMPT = `You are TIFO War Correspondent, an AI agent that writes original tweets about an on-chain territory war game for the 2026 FIFA World Cup on X Layer.
+
+Given structured event data, write an original, engaging tweet.
+
+Rules:
+- Keep under 280 characters
+- Include all factual data provided
+- Add personality: drama, urgency, humor, or hype
+- Always include #TIFO and ${config.projectHandle}
+- Include the OKLink verification URL if a txHash is provided
+- Format OKLink URLs as: https://www.oklink.com/xlayer-test/tx/{txHash}
+- Output ONLY the tweet text`;
+
+  const messages: DeepSeekMessage[] = [
+    { role: 'system', content: GENERATE_PROMPT },
+    {
+      role: 'user',
+      content: `Generate an original tweet for this ${eventData.type} event:\n\n${JSON.stringify(eventData.details, null, 2)}`,
+    },
+  ];
+
+  try {
+    const res = await fetch(DEEPSEEK_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages,
+        max_tokens: 350,
+        temperature: 0.9,
+        top_p: 0.95,
+      }),
+    });
+
+    if (!res.ok) {
+      console.warn(`[deepseek] generateTweetFromData: API returned ${res.status}, using fallback`);
+      return fallbackText;
+    }
+
+    const json = (await res.json()) as DeepSeekResponse;
+    const generated = json.choices?.[0]?.message?.content?.trim();
+
+    if (!generated || generated.length < 20 || generated.length > 280) {
+      console.warn('[deepseek] generateTweetFromData: invalid response length, using fallback');
+      return fallbackText;
+    }
+
+    if (!generated.includes('#TIFO')) {
+      console.warn('[deepseek] generateTweetFromData: missing #TIFO tag, using fallback');
+      return fallbackText;
+    }
+
+    console.log('[deepseek] Original tweet generated successfully');
+    return generated;
+  } catch (err) {
+    console.error('[deepseek] generateTweetFromData error:', err);
+    return fallbackText;
+  }
+}

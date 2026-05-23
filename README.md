@@ -76,7 +76,9 @@ tifo/
 │   │   └── libraries/
 │   │       ├── TifoTypes.sol         # Constants + custom errors
 │   │       └── PowerMath.sol         # Decay + underdog bonus pure functions
-│   ├── test/Tifo.t.sol               # 66 test cases, 99%+ source coverage
+│   ├── test/
+│   │   ├── Tifo.t.sol                    # 66 unit/integration test cases, 99%+ source coverage
+│   │   └── TifoFork.t.sol                # Fork tests against live X Layer Testnet deployments
 │   ├── script/
 │   │   ├── Deploy.s.sol              # Full deployment + wiring
 │   │   ├── SeedMap.s.sol             # Genesis anchor seeding (48 factions, real ISO mapping)
@@ -118,9 +120,11 @@ tifo/
 │   │   │   └── api/routes.ts         # REST: /map/state, /region/:id/history, etc.
 │   │   └── package.json
 │   └── correspondent/                # War Correspondent — auto-tweet agent
+│       ├── .env.example              # Environment template (RPC, X API, DeepSeek)
 │       ├── src/
 │       │   ├── index.ts              # Entry point
-│       │   ├── correspondent.ts      # Event polling + countdown dispatch
+│       │   ├── correspondent.ts      # Event polling + AI dispatch + countdown
+│       │   ├── deepseek.ts           # DeepSeek V4 AI integration (enhance + generate)
 │       │   ├── templates.ts          # Tweet generators (3 variants + countdown)
 │       │   ├── twitter.ts            # X API v2 OAuth 1.0a client (zero SDK)
 │       │   └── factions.ts           # 48 faction names + flag emojis
@@ -208,6 +212,18 @@ The social-game core. When a region flips from Faction A to Faction B, former Fa
 
 Defection is bounded: the contract iterates over 48 factions to find the caller's largest foreign contribution -- a constant-gas operation.
 
+### Defection Frontend Entry Points
+
+Defection is TIFO's signature social mechanic and is surfaced prominently across three pages:
+
+| Location | When Visible | What It Shows |
+|----------|-------------|---------------|
+| **Region Sidebar** (`/map`) | Always, for enrolled users viewing a non-neutral region | If user is in owner faction: active "Defect & Reclaim" button. If not: "Defection Opportunity" prompt with faction-switch link to `/me` |
+| **Rally Page** (`/rally/[regionId]`) | Always, for enrolled users on a non-neutral region | Same dual display: active defect button (owner faction) or opportunity prompt with link to switch factions |
+| **War Record** (`/me`) | When faction territories < 5 | Alert card with one-click defect action for stale contributions |
+
+This ensures users discover the defection mechanic regardless of which page they enter from -- the `/map` sidebar and `/rally` page both guide non-owner-faction users toward the faction switch needed to defect.
+
 ---
 
 ## Frontend Pages
@@ -215,8 +231,8 @@ Defection is bounded: the contract iterates over 48 factions to find the caller'
 | Route | Page | Description |
 |-------|------|-------------|
 | `/` | Landing Page | Hero with animated world map preview, live stats counter, how-it-works guide |
-| `/map` | Territory Map | Full-screen D3-geo world map colored by faction ownership. Click any region for details + rally button |
-| `/rally/[regionId]` | Rally Panel | Slider to select commit amount, real-time underdog bonus preview, power change prediction, wagmi `rally()` transaction with approve flow |
+| `/map` | Territory Map | Full-screen D3-geo world map colored by faction ownership. Click any region for details + rally button + **defection entry** |
+| `/rally/[regionId]` | Rally Panel | Slider to select commit amount, real-time underdog bonus preview, power change prediction, wagmi `rally()` transaction with approve flow, **defection panel with faction-switch prompt** |
 | `/faction/[id]` | Faction Details | Territory count, WarChest prize pool, member count, owned regions list, top contributors |
 | `/me` | My War Record | Faction enrollment (join/switch), contribution stats, defection opportunities, share on X |
 | `/leaderboard` | Faction Leaderboard | 48 factions ranked by territory count, gold/silver/bronze top-3 styling |
@@ -292,6 +308,15 @@ The correspondent (`apps/correspondent/`) monitors three on-chain events and aut
 
 Each tweet includes OKLink transaction proof, `@0xWangyangming @aspect_build #TIFO #XLayer` tags, and 3 randomized template variants for variety.
 
+### DeepSeek V4 AI Integration
+
+The Correspondent integrates DeepSeek V4 as an AI engine for more natural, varied tweet generation. When `DEEPSEEK_API_KEY` is configured, two AI modes activate:
+
+1. **AI Generation** (`generateTweetFromData`): Generates entirely original tweets from structured on-chain event data (faction names, region IDs, tx hashes). Uses higher temperature (0.9) for creative variety. This is the primary mode.
+2. **AI Enhancement** (`enhanceTweet`): Rewrites template-generated tweets with more personality and flair while preserving all factual data. Used as a fallback when generation doesn't produce valid output.
+
+The flow is: **structured data → AI generation → (fallback) AI enhancement of template → (fallback) raw template text**. If no API key is set, the system falls back gracefully to template-based tweets with zero errors.
+
 - **Countdown tweets**: Daily automated countdown to World Cup kickoff (June 11, 2026). Reads live `territoryCounts()` from the TerritoryMap contract to display the top-3 faction leaderboard. Fires on startup and every 24 hours thereafter.
 - **5-block confirmation buffer** to avoid tweeting reorged events
 - **Rate limiter**: max 10 tweets per 15-minute window
@@ -353,6 +378,34 @@ npm run test:e2e:ui
 
 6 test suites covering: landing page, faction selection, map rendering, rally flow, verifiability panel (OKLink links), and mobile layout responsiveness. Tests run on Desktop Chrome and mobile Safari viewports.
 
+### Fork Tests (Live Deployment Verification)
+
+Fork tests run against the live X Layer Testnet deployment to verify contract bytecode, wiring correctness, and end-to-end flows:
+
+```bash
+cd contracts
+forge test --fork-url https://testrpc.xlayer.tech -vvv --match-contract TifoForkTest
+```
+
+| Test | What It Verifies |
+|------|-----------------|
+| `test_Fork_ContractsHaveBytecode` | All 5 contracts deployed with bytecode |
+| `test_Fork_MapWiredToRegistry` | TerritoryMap.registry() → FactionRegistry |
+| `test_Fork_WarChestWiredToMap` | WarChest.map() → TerritoryMap |
+| `test_Fork_OracleWiredToMap` | MatchOracle.map() → TerritoryMap |
+| `test_Fork_MapOwnerIsOracle` | TerritoryMap.owner() == MatchOracle |
+| `test_Fork_WarChestUpdaterWired` | WarChest.updater() == TerritoryMap (bumpContribTotal callback) |
+| `test_Fork_WarChestTokenIsUSDT` | WarChest.token() == MockUSDT |
+| `test_Fork_RegistryWiredToChest` | FactionRegistry.warChest() == WarChest |
+| `test_Fork_RegionsSeeded` | 200 regions seeded |
+| `test_Fork_48FactionsConfigured` | territoryCounts returns 48 entries |
+| `test_Fork_JoinRallyCaptureFlow` | join → faucet → approve → rally → capture |
+| `test_Fork_DefectFlowAfterCapture` | join → rally → capture → switch faction → defect (full betrayal flow) |
+| `test_Fork_EffectivePowerDecays` | Power decreases after time passes (decay verification) |
+| `test_Fork_GetMapStateReturns200` | getMapState() returns 200 entries |
+| `test_Fork_TerritoryCounts48Entries` | At least some territories owned |
+| `test_Fork_MockUSDTMetadata` | Token name, symbol, decimals correct |
+
 ### Smart Contracts
 
 ```bash
@@ -366,6 +419,9 @@ forge build
 
 # Run tests
 forge test -vvv
+
+# Run fork tests against live X Layer Testnet
+forge test --fork-url https://testrpc.xlayer.tech -vvv --match-contract TifoForkTest
 
 # Deploy to X Layer Testnet
 forge script script/Deploy.s.sol:Deploy \
