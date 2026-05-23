@@ -13,6 +13,7 @@ echo "  Next.js 14 + Nginx"
 echo "========================================="
 
 APP_DIR="/opt/tifo"
+WEB_DIR="$APP_DIR/apps/web"
 cd "$APP_DIR"
 
 # ── 1. 拉取最新代码 ──────────────────────────────────────────
@@ -23,7 +24,7 @@ git pull origin main || true
 # ── 2. 写入前端环境变量 ──────────────────────────────────────
 echo ""
 echo "[2/6] 配置环境变量..."
-cat > "$APP_DIR/.env.local" << 'EOF'
+cat > "$WEB_DIR/.env.local" << 'EOF'
 NEXT_PUBLIC_INDEXER_API=http://76.13.189.224/api
 EOF
 echo "  .env.local 已写入"
@@ -31,6 +32,7 @@ echo "  .env.local 已写入"
 # ── 3. 安装前端依赖 ──────────────────────────────────────────
 echo ""
 echo "[3/6] 安装依赖..."
+cd "$WEB_DIR"
 npm install --legacy-peer-deps 2>&1 | tail -5
 echo "  依赖安装完成"
 
@@ -52,7 +54,7 @@ After=network.target tifo-indexer.service
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/tifo
+WorkingDirectory=/opt/tifo/apps/web
 ExecStart=/usr/bin/node node_modules/.bin/next start -p 3001
 Restart=always
 RestartSec=5
