@@ -21,6 +21,9 @@ export const config = {
 
   projectHandle: process.env.PROJECT_HANDLE || '@0xWangyangming',
 
+  // DeepSeek V4 API for AI-enhanced tweet generation
+  deepseekApiKey: process.env.DEEPSEEK_API_KEY || '',
+
   confirmationBlocks: parseInt(process.env.CONFIRMATION_BLOCKS || '5', 10),
   pollIntervalMs: parseInt(process.env.POLL_INTERVAL_MS || '5000', 10),
   startBlock: BigInt(process.env.START_BLOCK || '30996200'),

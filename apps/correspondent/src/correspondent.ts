@@ -12,6 +12,7 @@ import { config } from './config';
 import { publishTweet } from './twitter';
 import { tweetTerritoryCaptured, tweetDefected, tweetMatchEvent, tweetCountdown } from './templates';
 import { getFaction } from './factions';
+import { enhanceTweet } from './deepseek';
 
 // ── ABIs (only events we care about) ──────────────────────────────
 
@@ -219,7 +220,10 @@ export class Correspondent {
     this.rateLimiter.record();
     this.tweetCount++;
     console.log(`[correspondent] Event: ${kind} at block ${log.blockNumber} — generating tweet #${this.tweetCount}`);
-    await publishTweet(tweetText);
+
+    // Optionally enhance with DeepSeek AI before posting
+    const finalText = await enhanceTweet(tweetText);
+    await publishTweet(finalText);
   }
 
   // ── Countdown tweet (once per 24h) ──────────────────────────────
@@ -262,11 +266,14 @@ export class Correspondent {
 
       const text = tweetCountdown({ daysUntilKickoff, top3: ranked });
 
+      // Optionally enhance with DeepSeek AI
+      const finalText = await enhanceTweet(text);
+
       this.rateLimiter.record();
       this.tweetCount++;
       this.lastCountdownTime = now;
       console.log(`[correspondent] Countdown tweet: ${daysUntilKickoff} days until kickoff — tweet #${this.tweetCount}`);
-      await publishTweet(text);
+      await publishTweet(finalText);
     } catch (err) {
       console.error('[correspondent] Failed to generate countdown tweet:', err);
     }
