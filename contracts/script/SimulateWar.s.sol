@@ -26,6 +26,7 @@ import {MatchOracle} from "../src/MatchOracle.sol";
 ///   MOCK_USDT, FACTION_REGISTRY, TERRITORY_MAP, MATCH_ORACLE - deployed addresses
 ///   SIM_FANS              - number of burner fan wallets (e.g. 20)
 ///   ROUNDS                - rally rounds per fan (e.g. 10)
+///   SIM_BATCH             - batch offset (increment each run to get fresh wallets)
 contract SimulateWar is Script {
     MockUSDT usdt;
     FactionRegistry registry;
@@ -46,23 +47,29 @@ contract SimulateWar is Script {
 
         uint256 fans = vm.envOr("SIM_FANS", uint256(20));
         uint256 rounds = vm.envOr("ROUNDS", uint256(10));
+        uint256 batch = vm.envOr("SIM_BATCH", uint256(0));
         uint16 regionCount = map.regionCount();
 
         for (uint256 i = 0; i < fans; i++) {
+            uint256 globalIdx = batch * 1000 + i;
             // Deterministic burner per fan index.
-            uint256 fanPk = uint256(keccak256(abi.encodePacked("tifo.sim.fan", i))) >> 8;
+            uint256 fanPk = uint256(keccak256(abi.encodePacked("tifo.sim.fan", globalIdx))) >> 8;
             address fan = vm.addr(fanPk);
 
-            // 1. Operator funds the fan with MockUSDT (open mint on testnet token).
-            vm.broadcast(operatorPk);
-            usdt.mint(fan, 100_000e18);
+            // 1. Fan already funded by FundFans.s.sol (MockUSDT + OKB for gas).
+            //    If re-running, fan may already have tokens and approvals.
 
             // 2. Fan approves the map and joins a pseudo-random faction.
-            uint8 faction = uint8(uint256(keccak256(abi.encodePacked("faction", i))) % 48);
+            //    Use try/catch so re-runs with same batch don't revert on already-enrolled fans.
+            uint8 faction = uint8(uint256(keccak256(abi.encodePacked("faction", globalIdx))) % 48);
             vm.startBroadcast(fanPk);
             usdt.approve(address(map), type(uint256).max);
             usdt.approve(address(registry), type(uint256).max);
-            registry.joinFaction(faction);
+            if (!registry.isEnrolled(fan)) {
+                registry.joinFaction(faction);
+            } else {
+                faction = registry.factionOf(fan);
+            }
 
             // 3. Fan rallies several contested regions with varied amounts. Targeting
             //    a small band of "frontline" regions concentrates conflict so captures
@@ -70,9 +77,9 @@ contract SimulateWar is Script {
             //    spreading thin across 200 regions.
             for (uint256 r = 0; r < rounds; r++) {
                 uint16 region = uint16(
-                    uint256(keccak256(abi.encodePacked("region", i, r))) % _frontline(regionCount)
+                    uint256(keccak256(abi.encodePacked("region", globalIdx, r))) % _frontline(regionCount)
                 );
-                uint256 amount = 50e18 + (uint256(keccak256(abi.encodePacked("amt", i, r))) % 450e18);
+                uint256 amount = 50e18 + (uint256(keccak256(abi.encodePacked("amt", globalIdx, r))) % 450e18);
                 map.rally(region, amount);
             }
             vm.stopBroadcast();
@@ -96,8 +103,9 @@ contract SimulateWar is Script {
     }
 
     /// @dev Frontline = the contested band where conflict is concentrated. We use
-    ///      the first ~20 regions (or all, if fewer) so flips actually occur.
+    ///      the first ~50 regions (or all, if fewer) so flips actually occur across
+    ///      a broader set of territories for more realistic activity.
     function _frontline(uint16 regionCount) internal pure returns (uint256) {
-        return regionCount < 20 ? regionCount : 20;
+        return regionCount < 50 ? regionCount : 50;
     }
 }
