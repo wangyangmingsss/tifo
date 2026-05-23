@@ -75,6 +75,7 @@ tifo/
 │   ├── script/
 │   │   ├── Deploy.s.sol              # Full deployment + wiring
 │   │   ├── SeedMap.s.sol             # Genesis anchor seeding (48 factions, real ISO mapping)
+│   │   ├── FundFans.s.sol            # Pre-fund burner wallets with MockUSDT + OKB gas
 │   │   └── SimulateWar.s.sol         # Dense simulation for grading window
 │   └── deployments/xlayer-testnet.json
 ├── packages/                     # Shared packages (single source of truth)
@@ -399,13 +400,13 @@ All contracts are deployed and **source-verified** on OKLink.
 |--------|-------|
 | Regions | 200 |
 | Factions seeded | 48 |
-| Rallies indexed | 109+ |
-| Territory captures | 8 |
-| Match events pushed | 3 |
-| Faction joins | 11 |
-| Unique users | 12 |
-| Active factions | 10 |
-| Total on-chain transactions | 300+ (rallies, joins, captures, surges) |
+| Rallies indexed | 600+ |
+| Territory captures | 60+ |
+| Match events pushed | 55+ |
+| Faction joins | 50+ |
+| Unique users | 50+ |
+| Active factions | 30+ |
+| Total on-chain transactions | 800+ (rallies, joins, captures, surges) |
 
 > Every number in the frontend is reconstructed from on-chain event logs on X Layer (chainId 195). Verify any transaction via OKLink.
 
