@@ -2,6 +2,18 @@
 
 > Full technical architecture of the TIFO protocol: smart contracts, frontend, event indexer, and war correspondent agent.
 
+## Live Infrastructure
+
+| Component | Status | Endpoint |
+|-----------|--------|----------|
+| **Indexer API** | Running | `http://76.13.189.224/api` |
+| **PostgreSQL 16** | Running | `tifo` database, 8 tables, 21 indexes |
+| **Correspondent** | Running (DRY_RUN) | Monitoring 3 event types, 4 dispatches generated |
+| **Nginx Gateway** | Running | Reverse proxy with CORS, port 80 |
+| **X Layer Testnet** | Syncing | chainId 195, 5-block confirmation buffer |
+
+**Server:** Ubuntu 24.04 LTS, 2 CPU / 8GB RAM / 100GB disk (Hostinger VPS, Malaysia)
+
 ---
 
 ## High-Level System Diagram

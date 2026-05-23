@@ -399,12 +399,12 @@ All contracts are deployed and **source-verified** on OKLink.
 |--------|-------|
 | Regions | 200 |
 | Factions seeded | 48 |
-| Rallies indexed | 34 |
-| Territory captures | 2 |
-| Match events pushed | 2 |
-| Faction joins | 6 |
-| Unique users | 7 |
-| Active factions | 6 |
+| Rallies indexed | 109+ |
+| Territory captures | 8 |
+| Match events pushed | 3 |
+| Faction joins | 11 |
+| Unique users | 12 |
+| Active factions | 10 |
 | Total on-chain transactions | 300+ (rallies, joins, captures, surges) |
 
 > Every number in the frontend is reconstructed from on-chain event logs on X Layer (chainId 195). Verify any transaction via OKLink.
@@ -429,13 +429,24 @@ Every color change on the map is a verifiable X Layer transaction.
 
 The Indexer and Correspondent services require a server with PostgreSQL to run, providing real-time indexed data to the frontend.
 
-### Current Status
+### Live Deployment
 
-| Service | Status | Notes |
-|---------|--------|-------|
-| PostgreSQL | Running | Database `tifo`, 8 tables + 13 indexes |
-| Indexer | Running | Polling X Layer Testnet, REST API on port 4000 |
-| Correspondent | Running (DRY_RUN) | Monitoring events, set `DRY_RUN=false` + X OAuth creds for live tweets |
+**API Base URL:** `http://76.13.189.224/api`
+
+| Service | Status | Details |
+|---------|--------|---------|
+| PostgreSQL 16 | Running | Database `tifo`, 8 tables + 21 indexes, auto-start on boot |
+| Indexer | Running | Polling X Layer Testnet (3s interval, 5-block confirmation), REST API on port 4000 via Nginx |
+| Correspondent | Running (DRY_RUN) | Monitoring TerritoryCaptured, Defected, MatchEventPushed events; 4 war dispatches generated |
+| Nginx | Running | Reverse proxy `/api/*` → port 4000, CORS enabled for frontend |
+
+**Live API endpoints:**
+- `http://76.13.189.224/api/healthz` — Health check + sync status
+- `http://76.13.189.224/api/map/state` — Full map ownership (200 regions)
+- `http://76.13.189.224/api/leaderboard` — 48-faction territory rankings
+- `http://76.13.189.224/api/stats` — Global on-chain statistics
+- `http://76.13.189.224/api/faction/:id` — Faction details + contributors
+- `http://76.13.189.224/api/region/:id/history` — Full capture history + OKLink proof links
 
 ### Architecture
 
@@ -490,7 +501,10 @@ Once deployed, the Indexer REST API is available at:
 - Direct: `http://<server-ip>:4000`
 - Via Nginx: `http://<server-ip>/api`
 
-Frontend should set `NEXT_PUBLIC_INDEXER_URL=http://<server-ip>:4000` (or the Nginx URL) in `.env.local`.
+Frontend should set the environment variable:
+```
+NEXT_PUBLIC_INDEXER_API=http://76.13.189.224/api
+```
 
 ### API Response Examples
 
@@ -498,8 +512,8 @@ Frontend should set `NEXT_PUBLIC_INDEXER_URL=http://<server-ip>:4000` (or the Ng
 ```json
 {
   "status": "ok",
-  "chainBlockNumber": "31033280",
-  "lastIndexedBlock": "31004800",
+  "chainBlockNumber": "31080049",
+  "lastIndexedBlock": "31008000",
   "database": "connected"
 }
 ```
@@ -509,8 +523,8 @@ Frontend should set `NEXT_PUBLIC_INDEXER_URL=http://<server-ip>:4000` (or the Ng
 {
   "chain": { "chainId": 195, "network": "X Layer Testnet", "regionCount": 200 },
   "totals": {
-    "rallies": 34, "captures": 2, "defections": 0,
-    "matchEvents": 2, "factionJoins": 6, "uniqueUsers": 7, "activeFactions": 6
+    "rallies": 109, "captures": 8, "defections": 0,
+    "matchEvents": 3, "factionJoins": 11, "uniqueUsers": 12, "activeFactions": 10
   },
   "verifiabilityNote": "Every number here is reconstructed from on-chain event logs on X Layer (chainId 195)."
 }
