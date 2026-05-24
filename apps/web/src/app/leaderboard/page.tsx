@@ -35,8 +35,8 @@ export default function LeaderboardPage() {
   const loadData = useCallback(async () => {
     try {
       const res = await fetchLeaderboard();
-      if (res && Array.isArray(res)) {
-        setData(res);
+      if (res && Array.isArray(res.leaderboard)) {
+        setData(res.leaderboard);
       }
     } catch { /* silent */ }
     setLoading(false);
