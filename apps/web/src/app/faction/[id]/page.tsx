@@ -12,10 +12,20 @@ import { fetchFaction } from '@/lib/api';
 
 interface FactionData {
   factionId: number;
-  territories: number[];
-  totalRallies: number;
-  totalCaptures: number;
-  topContributors: { address: string; amount: string }[];
+  territoriesHeld: number;
+  memberCount: number;
+  prizePool: string;
+  prizePoolFormatted: string;
+  stats: {
+    totalRallies: number;
+    uniqueRalliers: number;
+    regionsRallied: number;
+    defectionsIn: number;
+    defectionsOut: number;
+  };
+  topContributors: { user: string; rallyCount: number; totalContributed: string }[];
+  recentCaptures: { regionId: number; oldFaction: number; captureCount: number; txHash: string; oklinkUrl: string; timestamp: string }[];
+  recentMembers: { user: string; isSwitch: boolean; txHash: string; timestamp: string }[];
 }
 
 export default function FactionDetailPage() {
@@ -76,9 +86,10 @@ export default function FactionDetailPage() {
     );
   }
 
-  const territories = apiData?.territories ?? [];
-  const formattedPrize = prizePool ? formatUnits(prizePool as bigint, 18) : '0';
-  const members = memberCount ? Number(memberCount) : 0;
+  const territoriesHeld = apiData?.territoriesHeld ?? 0;
+  const formattedPrize = apiData?.prizePoolFormatted ?? (prizePool ? formatUnits(prizePool as bigint, 18) : '0');
+  const members = apiData?.memberCount ?? (memberCount ? Number(memberCount) : 0);
+  const recentCaptures = apiData?.recentCaptures ?? [];
 
   return (
     <div className="min-h-screen pt-24 pb-16 px-4 sm:px-6 lg:px-8">
@@ -137,9 +148,12 @@ export default function FactionDetailPage() {
         {/* Stats grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
           {[
-            { label: 'Territories Held', value: territories.length.toString() },
+            { label: 'Territories Held', value: territoriesHeld.toString() },
             { label: 'Prize Pool', value: `${Number(formattedPrize).toLocaleString()} mUSDT` },
             { label: 'Members', value: members.toLocaleString() },
+            { label: 'Total Rallies', value: (apiData?.stats?.totalRallies ?? 0).toLocaleString() },
+            { label: 'Regions Rallied', value: (apiData?.stats?.regionsRallied ?? 0).toLocaleString() },
+            { label: 'Captures Won', value: recentCaptures.length.toLocaleString() },
           ].map((s) => (
             <div
               key={s.label}
@@ -156,22 +170,26 @@ export default function FactionDetailPage() {
         {/* Captured Regions */}
         <div className="rounded-2xl border border-gray-800/60 bg-gray-900/40 backdrop-blur-sm p-6 mb-8">
           <h2 className="text-lg font-bold text-white mb-4">
-            Captured Regions
-            <span className="ml-2 text-sm font-normal text-gray-500">({territories.length})</span>
+            Recent Captures
+            <span className="ml-2 text-sm font-normal text-gray-500">({recentCaptures.length})</span>
           </h2>
           {loading ? (
             <p className="text-gray-500 text-sm">Loading...</p>
-          ) : territories.length === 0 ? (
+          ) : recentCaptures.length === 0 ? (
             <p className="text-gray-500 text-sm">No territories captured yet.</p>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {territories.map((regionId: number) => (
-                <span
-                  key={regionId}
-                  className="inline-flex items-center px-3 py-1.5 text-sm font-mono rounded-lg border border-gray-700/60 bg-gray-800/40 text-gray-300"
+            <div className="space-y-2">
+              {recentCaptures.map((cap) => (
+                <a
+                  key={cap.txHash}
+                  href={cap.oklinkUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between px-3 py-2.5 text-sm rounded-lg border border-gray-700/60 bg-gray-800/40 text-gray-300 hover:border-amber-500/30 transition-colors"
                 >
-                  Region #{regionId}
-                </span>
+                  <span className="font-mono">Region #{cap.regionId}</span>
+                  <span className="text-xs text-gray-500">{new Date(cap.timestamp).toLocaleDateString()}</span>
+                </a>
               ))}
             </div>
           )}
@@ -188,7 +206,7 @@ export default function FactionDetailPage() {
             <div className="space-y-3">
               {apiData.topContributors.map((c, i) => (
                 <div
-                  key={c.address}
+                  key={c.user}
                   className="flex items-center gap-4 p-3 rounded-xl border border-gray-800/40 bg-gray-800/20 hover:border-gray-700/60 transition-colors"
                 >
                   <span className={`text-sm font-bold w-8 text-center ${
@@ -197,10 +215,13 @@ export default function FactionDetailPage() {
                     #{i + 1}
                   </span>
                   <span className="font-mono text-sm text-gray-300 flex-1 truncate">
-                    {c.address.slice(0, 6)}...{c.address.slice(-4)}
+                    {c.user.slice(0, 6)}...{c.user.slice(-4)}
+                  </span>
+                  <span className="text-xs text-gray-500 mr-2">
+                    {c.rallyCount} rallies
                   </span>
                   <span className="text-sm font-semibold text-amber-400 font-mono tabular-nums">
-                    {Number(formatUnits(BigInt(c.amount), 18)).toLocaleString()} mUSDT
+                    {Number(formatUnits(BigInt(c.totalContributed), 18)).toLocaleString()} mUSDT
                   </span>
                 </div>
               ))}
