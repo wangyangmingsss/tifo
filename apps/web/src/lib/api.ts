@@ -1,4 +1,4 @@
-const API = 'http://76.13.189.224/api';
+const API = '/api';
 
 export async function fetchStats() {
   const res = await fetch(`${API}/stats`);
