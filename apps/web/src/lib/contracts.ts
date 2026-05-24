@@ -18,6 +18,6 @@ export const CONTRACTS = {
   MatchOracle: '0x57E585543940cCfAB71141d84A419C3F7872d5be' as `0x${string}`,
 } as const;
 
-export const INDEXER_API = 'http://76.13.189.224/api';
+export const INDEXER_API = '/api';
 
 export const OKLINK_TX = (hash: string) => `https://www.oklink.com/xlayer-test/tx/${hash}`;

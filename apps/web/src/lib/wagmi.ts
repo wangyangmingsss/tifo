@@ -18,7 +18,7 @@ export const xlayerTestnet = defineChain({
 
 export const config = getDefaultConfig({
   appName: 'TIFO - World Cup Territory War',
-  projectId: 'tifo-2026-xcup',
+  projectId: '8614d6fa9b34716c9206e55a53464bea',
   chains: [xlayerTestnet],
   ssr: true,
 });
