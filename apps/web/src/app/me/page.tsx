@@ -87,7 +87,7 @@ export default function MePage() {
   const formattedAllowance = allowance ? Number(formatUnits(allowance as bigint, 18)).toLocaleString(undefined, { maximumFractionDigits: 2 }) : '0';
 
   // Wrong chain warning
-  const isWrongChain = isConnected && chain?.id !== 195;
+  const isWrongChain = isConnected && chain?.id !== 1952;
 
   // Helper to extract readable error message
   function formatError(err: Error | null): string | null {
@@ -145,7 +145,7 @@ export default function MePage() {
             <div className="max-w-lg mx-auto mb-6 p-4 rounded-xl border border-red-500/30 bg-red-500/5 text-center">
               <p className="text-sm text-red-400 font-semibold mb-1">Wrong Network</p>
               <p className="text-xs text-gray-400">
-                Please switch to <span className="text-white font-bold">X Layer Testnet</span> (Chain ID: 195) in your wallet to proceed.
+                Please switch to <span className="text-white font-bold">X Layer Testnet</span> (Chain ID: 1952) in your wallet to proceed.
               </p>
             </div>
           )}
@@ -265,7 +265,7 @@ export default function MePage() {
           <div className="mb-6 p-4 rounded-xl border border-red-500/30 bg-red-500/5 text-center">
             <p className="text-sm text-red-400 font-semibold mb-1">Wrong Network</p>
             <p className="text-xs text-gray-400">
-              Please switch to <span className="text-white font-bold">X Layer Testnet</span> (Chain ID: 195) in your wallet.
+              Please switch to <span className="text-white font-bold">X Layer Testnet</span> (Chain ID: 1952) in your wallet.
             </p>
           </div>
         )}
