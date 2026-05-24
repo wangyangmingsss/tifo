@@ -77,7 +77,7 @@ export default function FactionDetailPage() {
   }
 
   const territories = apiData?.territories ?? [];
-  const formattedPrize = prizePool ? formatUnits(prizePool as bigint, 6) : '0';
+  const formattedPrize = prizePool ? formatUnits(prizePool as bigint, 18) : '0';
   const members = memberCount ? Number(memberCount) : 0;
 
   return (
@@ -200,7 +200,7 @@ export default function FactionDetailPage() {
                     {c.address.slice(0, 6)}...{c.address.slice(-4)}
                   </span>
                   <span className="text-sm font-semibold text-amber-400 font-mono tabular-nums">
-                    {Number(formatUnits(BigInt(c.amount), 6)).toLocaleString()} mUSDT
+                    {Number(formatUnits(BigInt(c.amount), 18)).toLocaleString()} mUSDT
                   </span>
                 </div>
               ))}

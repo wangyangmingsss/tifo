@@ -162,6 +162,7 @@ export default function RallyPage() {
     writeContract: approveWrite,
     data: approveTxHash,
     isPending: approveIsPending,
+    error: approveError,
     reset: resetApprove,
   } = useWriteContract();
 
@@ -173,6 +174,7 @@ export default function RallyPage() {
     writeContract: rallyWrite,
     data: rallyTxHash,
     isPending: rallyIsPending,
+    error: rallyError,
     reset: resetRally,
   } = useWriteContract();
 
@@ -409,6 +411,29 @@ export default function RallyPage() {
                       `Rally ${amount} mUSDT`
                     )}
                   </button>
+                )}
+
+                {/* Error display */}
+                {(approveError || rallyError) && (
+                  <div className="p-4 rounded-xl border border-red-500/30 bg-red-500/5">
+                    <p className="text-sm text-red-400 font-semibold mb-1">Transaction Failed</p>
+                    <p className="text-xs text-gray-400 break-words">
+                      {(() => {
+                        const err = approveError || rallyError;
+                        const msg = err?.message || String(err);
+                        if (msg.includes('User rejected') || msg.includes('user rejected') || msg.includes('denied'))
+                          return 'Transaction was rejected by the user.';
+                        if (msg.length > 200) return msg.slice(0, 180) + '...';
+                        return msg;
+                      })()}
+                    </p>
+                    <button
+                      onClick={() => { resetApprove(); resetRally(); }}
+                      className="mt-2 text-xs text-red-400 hover:text-red-300 font-semibold underline"
+                    >
+                      Dismiss and try again
+                    </button>
+                  </div>
                 )}
               </>
             )}
