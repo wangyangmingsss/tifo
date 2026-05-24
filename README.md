@@ -6,6 +6,8 @@
 
 *Submission deadline 2026-05-28 23:59 UTC*
 
+**[Live Demo](https://76.13.189.224/)** | **[X Post](https://x.com/0xWangyangming/status/2058563699942756728)**
+
 ---
 
 ## The Problem
