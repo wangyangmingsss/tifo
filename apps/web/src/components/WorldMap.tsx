@@ -96,7 +96,7 @@ function getFactionColor(factionId: number): string {
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-const WORLD_ATLAS_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
+const WORLD_ATLAS_URL = '/data/countries-110m.json';
 
 export function WorldMap({ mapState, onRegionClick, className, mini = false }: WorldMapProps) {
   const [topoData, setTopoData] = useState<Topology | null>(null);
